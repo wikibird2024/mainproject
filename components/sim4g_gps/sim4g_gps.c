@@ -14,13 +14,13 @@ static gps_data_t last_location = {0};
 
 void sim4g_gps_init(void) {
     char response[64];
-    comm_send_command("AT+QGPS=1", response, sizeof(response));
+    comm_uart_send_command("AT+QGPS=1", response, sizeof(response));
     vTaskDelay(pdMS_TO_TICKS(500));
 
     if (strstr(response, "OK")) {
-        debugs_log(TAG, "GPS initialized.");
+        INFO("GPS initialized.");
     } else {
-        debugs_log(TAG, "GPS initialization failed!");
+        ERROR("GPS initialization failed!");
     }
 }
 
@@ -28,7 +28,7 @@ void sim4g_gps_set_phone_number(const char *number) {
     if (number && strlen(number) < sizeof(phone_number)) {
         strncpy(phone_number, number, sizeof(phone_number) - 1);
         phone_number[sizeof(phone_number) - 1] = '\0';
-        debugs_log(TAG, "Phone set: %s", phone_number);
+        INFO("Phone set: %s", phone_number);
     }
 }
 
@@ -37,7 +37,7 @@ gps_data_t sim4g_gps_get_location(void) {
     memset(&last_location, 0, sizeof(last_location));
     last_location.valid = false;
 
-    comm_send_command("AT+QGPSLOC?", response, sizeof(response));
+    comm_uart_send_command("AT+QGPSLOC?", response, sizeof(response));
     vTaskDelay(pdMS_TO_TICKS(500));
 
     if (sscanf(response, "+QGPSLOC: %[^,],%[^,],%[^,],%*s",
@@ -45,12 +45,12 @@ gps_data_t sim4g_gps_get_location(void) {
                last_location.latitude,
                last_location.longitude) == 3) {
         last_location.valid = true;
-        debugs_log(TAG, "Location: %s, %s at %s",
-                   last_location.latitude,
-                   last_location.longitude,
-                   last_location.timestamp);
+        INFO("Location: %s, %s at %s",
+             last_location.latitude,
+             last_location.longitude,
+             last_location.timestamp);
     } else {
-        debugs_log(TAG, "Failed to get location!");
+        ERROR("Failed to get location!");
     }
 
     return last_location;
@@ -65,23 +65,23 @@ static void sms_task(void *param) {
 
     char cmd[32];
     snprintf(cmd, sizeof(cmd), "AT+CMGS=\"%s\"", phone_number);
-    comm_send_command(cmd, NULL, 0);
+    comm_uart_send_command(cmd, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    comm_send_command(sms, NULL, 0);
+    comm_uart_send_command(sms, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    comm_send_command("\x1A", NULL, 0);  // kết thúc tin nhắn
+    comm_uart_send_command("\x1A", NULL, 0);  // kết thúc tin nhắn
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    debugs_log(TAG, "SMS sent: %s", sms);
+    INFO("SMS sent: %s", sms);
     vPortFree(location);
     vTaskDelete(NULL);
 }
 
 void send_fall_alert_sms(gps_data_t location) {
     if (!location.valid) {
-        debugs_log(TAG, "Dữ liệu GPS không hợp lệ. Không gửi SMS.");
+        WARN("Dữ liệu GPS không hợp lệ. Không gửi SMS.");
         return;
     }
 
@@ -90,7 +90,6 @@ void send_fall_alert_sms(gps_data_t location) {
         *copy = location;
         xTaskCreate(sms_task, "sms_task", 2048, copy, 5, NULL);
     } else {
-        debugs_log(TAG, "Không thể cấp phát bộ nhớ cho SMS task.");
+        ERROR("Không thể cấp phát bộ nhớ cho SMS task.");
     }
 }
-

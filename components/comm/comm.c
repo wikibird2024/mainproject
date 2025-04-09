@@ -32,7 +32,8 @@ void comm_uart_init() {
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE};
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+    };
 
     uart_driver_install(UART_NUM, 1024 * 2, 0, 0, NULL, 0);
     uart_param_config(UART_NUM, &uart_config);
@@ -40,26 +41,27 @@ void comm_uart_init() {
     ESP_LOGI(TAG, "UART initialized.");
 }
 
-esp_err_t comm_uart_send_command(const char *command) {
-    if (!command) return ESP_ERR_INVALID_ARG;
+bool comm_uart_send_command(const char *command, char *response_buf, size_t buf_size) {
+    if (!command) return false;
+
     ESP_LOGI(TAG, "Sending command: %s", command);
     uart_write_bytes(UART_NUM, command, strlen(command));
     uart_write_bytes(UART_NUM, "\r\n", 2);
-    return ESP_OK;
-}
 
-esp_err_t comm_uart_read_response(char *response, int len) {
-    if (!response || len <= 0) return ESP_ERR_INVALID_ARG;
-
-    int read_bytes = uart_read_bytes(UART_NUM, (uint8_t *)response, len - 1, 100 / portTICK_PERIOD_MS);
-    if (read_bytes <= 0) {
-        ESP_LOGW(TAG, "No response received");
-        return ESP_FAIL;
+    if (response_buf && buf_size > 0) {
+        int read_bytes = uart_read_bytes(UART_NUM, (uint8_t *)response_buf, buf_size - 1, 100 / portTICK_PERIOD_MS);
+        if (read_bytes > 0) {
+            response_buf[read_bytes] = '\0';
+            ESP_LOGI(TAG, "Received response: %s", response_buf);
+            return true;
+        } else {
+            ESP_LOGW(TAG, "No response received");
+            response_buf[0] = '\0';
+            return false;
+        }
     }
 
-    response[read_bytes] = '\0';
-    ESP_LOGI(TAG, "Received response: %s", response);
-    return ESP_OK;
+    return true;
 }
 
 // ======== I2C (MPU6050) ========
@@ -71,7 +73,8 @@ void comm_i2c_init() {
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_io_num = I2C_MASTER_SCL,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 100000};
+        .master.clk_speed = 100000
+    };
     i2c_param_config(I2C_NUM_0, &conf);
     i2c_driver_install(I2C_NUM_0, conf.mode, 0, 0, 0);
     ESP_LOGI(TAG, "I2C initialized.");
@@ -99,7 +102,8 @@ esp_err_t comm_pwm_init(int pin, int frequency) {
         .timer_num = LEDC_TIMER_0,
         .duty_resolution = LEDC_TIMER_10_BIT,
         .freq_hz = frequency,
-        .clk_cfg = LEDC_AUTO_CLK};
+        .clk_cfg = LEDC_AUTO_CLK
+    };
     ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
 
     ledc_channel_config_t channel_conf = {
@@ -109,7 +113,8 @@ esp_err_t comm_pwm_init(int pin, int frequency) {
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = LEDC_TIMER_0,
         .duty = 0,
-        .hpoint = 0};
+        .hpoint = 0
+    };
     ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
 
     return ESP_OK;

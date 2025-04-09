@@ -3,12 +3,12 @@
 #include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 /// ======== UART (SIM 4G GPS) ========
 
 void comm_uart_init(void);                                 // Khởi tạo UART
-esp_err_t comm_uart_send_command(const char *command);     // Gửi lệnh AT
-esp_err_t comm_uart_read_response(char *response, int len); // Đọc phản hồi
+bool comm_uart_send_command(const char *command, char *response_buf, size_t buf_size); // Gửi lệnh AT và nhận phản hồi
 
 /// ======== I2C (MPU6050) ========
 
