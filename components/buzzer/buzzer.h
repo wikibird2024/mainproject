@@ -1,23 +1,18 @@
 #pragma once
 
-#include "driver/gpio.h" // Thư viện điều khiển GPIO
-#include "esp_err.h"      // Thư viện quản lý lỗi
-
-// Định nghĩa chân GPIO cho buzzer
-#define BUZZER_GPIO GPIO_NUM_25  // Thay số 25 bằng chân thực tế bạn sử dụng
+#include "esp_err.h"
 
 /**
- * @brief Khởi tạo buzzer (Cấu hình GPIO output)
+ * @brief Khởi tạo buzzer (GPIO, task xử lý bật/tắt)
+ * 
+ * @return ESP_OK nếu thành công, ESP_FAIL nếu lỗi
  */
-void buzzer_init(void);
+esp_err_t buzzer_init(void);
 
 /**
- * @brief Bật còi
+ * @brief Bật còi trong duration_ms mili giây (non-blocking)
+ * 
+ * @param duration_ms Thời gian còi kêu (ms)
+ * @return ESP_OK nếu gửi thành công, ESP_FAIL nếu queue đầy
  */
-void buzzer_on(void);
-
-/**
- * @brief Tắt còi
- */
-void buzzer_off(void);
-
+esp_err_t buzzer_beep(int duration_ms);
