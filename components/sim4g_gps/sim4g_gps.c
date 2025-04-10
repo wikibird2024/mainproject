@@ -14,6 +14,9 @@ static gps_data_t last_location = {0};
 
 void sim4g_gps_init(void) {
     char response[64];
+     // Bật chế độ tự động GPS khi khởi động
+    comm_uart_send_command("AT+QGPSCFG=\"autogps\",1", NULL, 0);
+    vTaskDelay(pdMS_TO_TICKS(200));
     comm_uart_send_command("AT+QGPS=1", response, sizeof(response));
     vTaskDelay(pdMS_TO_TICKS(500));
 
@@ -72,7 +75,7 @@ static void sms_task(void *param) {
     vTaskDelay(pdMS_TO_TICKS(500));
 
     comm_uart_send_command("\x1A", NULL, 0);  // kết thúc tin nhắn
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     INFO("SMS sent: %s", sms);
     vPortFree(location);
