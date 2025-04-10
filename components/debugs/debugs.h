@@ -1,5 +1,5 @@
 #pragma once
-
+#include <stdbool.h>
 #include "esp_log.h"
 
 // TAG mặc định cho log của component
@@ -14,6 +14,12 @@
 /**
  * @brief Thiết lập mức log mặc định là DEBUG.
  *
- * Nên gọi một lần trong app_main() để bật log chi tiết trong quá trình phát triển.
+ * Nên gọi một lần trong app_main() để bật log chi tiết 
  */
 void debugs_init(void);
+/**
+ * @brief Bật hoặc tắt log định kỳ trong runtime.
+ * Có tác dụng nếu Kconfig DEBUGS_ENABLE_PERIODIC_LOG được bật.
+ */
+void debugs_set_periodic_log(bool enable);
+

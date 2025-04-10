@@ -1,0 +1,23 @@
+menu "Debugs Configuration"
+
+config DEBUGS_ENABLE_LOG
+    bool "Enable system debug log"
+    default y
+    help
+        Bật/tắt hệ thống in log từ component debugs.
+
+config DEBUGS_ENABLE_PERIODIC_LOG
+    bool "Enable periodic log output"
+    default y
+    depends on DEBUGS_ENABLE_LOG
+    help
+        Nếu bật, hệ thống sẽ in log định kỳ mỗi khoảng thời gian nhất định.
+
+config DEBUGS_LOG_INTERVAL_MS
+    int "Periodic log interval (ms)"
+    default 1000
+    depends on DEBUGS_ENABLE_PERIODIC_LOG
+    help
+        Khoảng thời gian giữa mỗi log định kỳ (đơn vị: mili giây).
+
+endmenu
