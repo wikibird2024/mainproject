@@ -36,6 +36,9 @@ sensor_data_t mpu6050_read_data(void) {
         data.gyro_x  = (int16_t)((raw_data[8] << 8) | raw_data[9]) / 131.0;
         data.gyro_y  = (int16_t)((raw_data[10] << 8) | raw_data[11]) / 131.0;
         data.gyro_z  = (int16_t)((raw_data[12] << 8) | raw_data[13]) / 131.0;
+        // prin data log
+        ESP_LOGI(TAG, "Accel X: %.2f, Accel Y: %.2f, Accel Z: %.2f", data.accel_x, data.accel_y, data.accel_z);
+        ESP_LOGI(TAG, "Gyro X: %.2f, Gyro Y: %.2f, Gyro Z: %.2f", data.gyro_x, data.gyro_y, data.gyro_z);
     } else {
         ESP_LOGE(TAG, "Failed to read MPU6050 data!");
     }
@@ -47,10 +50,12 @@ bool detect_fall(sensor_data_t data) {
     float acc_magnitude = data.accel_x * data.accel_x +
                           data.accel_y * data.accel_y +
                           data.accel_z * data.accel_z;
+                              // In giá trị magnitude vào log để theo dõi
+    ESP_LOGI(TAG, "Accelerometer magnitude: %.2f", acc_magnitude);
     
     // Ngưỡng phát hiện té ngã (giá trị thử nghiệm)
     if (acc_magnitude < 0.3) {
-        ESP_LOGW(TAG, "Fall detected!");
+        ESP_LOGW(TAG, "Fall detected! Acceleration magnitude: %.2f", acc_magnitude);
         return true;
     }
 

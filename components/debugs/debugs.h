@@ -19,7 +19,11 @@
 void debugs_init(void);
 /**
  * @brief Bật hoặc tắt log định kỳ trong runtime.
- * Có tác dụng nếu Kconfig DEBUGS_ENABLE_PERIODIC_LOG được bật.
+ * 
+ * Nếu cấu hình `CONFIG_DEBUGS_ENABLE_PERIODIC_LOG` được bật trong menuconfig, 
+ * hàm này sẽ cho phép log theo chu kỳ với khoảng thời gian được định nghĩa trong `CONFIG_DEBUGS_LOG_INTERVAL_MS`.
+ * 
+ * @param enable Trạng thái bật/tắt log định kỳ. `true` để bật, `false` để tắt.
  */
 void debugs_set_periodic_log(bool enable);
 

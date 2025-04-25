@@ -17,7 +17,7 @@
 #define ALERT_DURATION_MS 5000  // Cảnh báo kéo dài 5 giây
 
 // Số điện thoại nhận cảnh báo
-#define PHONE_NUMBER "+84123456789"
+#define PHONE_NUMBER "+84559865843"
 
 // Khởi tạo toàn bộ hệ thống
 void system_init(void) {

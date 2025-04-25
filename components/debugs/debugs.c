@@ -18,7 +18,7 @@ static void debugs_periodic_task(void *arg)
 
 void debugs_init(void)
 {
-    esp_log_level_set(DEBUG_TAG, ESP_LOG_DEBUG); 
+    esp_log_level_set("*", ESP_LOG_DEBUG); 
     ESP_LOGI(DEBUG_TAG, "Debugs system initialized.");
 
 #if CONFIG_DEBUGS_ENABLE_PERIODIC_LOG
