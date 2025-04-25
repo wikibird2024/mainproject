@@ -6,10 +6,17 @@
 #define DEBUG_TAG "DEBUGS"
 
 // Macro ghi log theo các mức độ khác nhau
-#define DEBUG(fmt, ...) ESP_LOGD(DEBUG_TAG, fmt, ##__VA_ARGS__)
-#define INFO(fmt, ...)  ESP_LOGI(DEBUG_TAG, fmt, ##__VA_ARGS__)
-#define WARN(fmt, ...)  ESP_LOGW(DEBUG_TAG, fmt, ##__VA_ARGS__)
-#define ERROR(fmt, ...) ESP_LOGE(DEBUG_TAG, fmt, ##__VA_ARGS__)
+#ifdef CONFIG_DEBUGS_ENABLE_LOG
+    #define DEBUG(fmt, ...) ESP_LOGD(DEBUG_TAG, fmt, ##__VA_ARGS__)
+    #define INFO(fmt, ...)  ESP_LOGI(DEBUG_TAG, fmt, ##__VA_ARGS__)
+    #define WARN(fmt, ...)  ESP_LOGW(DEBUG_TAG, fmt, ##__VA_ARGS__)
+    #define ERROR(fmt, ...) ESP_LOGE(DEBUG_TAG, fmt, ##__VA_ARGS__)
+#else
+    #define DEBUG(fmt, ...)
+    #define INFO(fmt, ...)
+    #define WARN(fmt, ...)
+    #define ERROR(fmt, ...)
+#endif
 
 /**
  * @brief Thiết lập mức log mặc định là DEBUG.

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "mpu6050.h"
 #include "sim4g_gps.h"
@@ -18,6 +19,9 @@
 
 // Số điện thoại nhận cảnh báo
 #define PHONE_NUMBER "+84559865843"
+
+// Semaphore bảo vệ tài nguyên chung
+static SemaphoreHandle_t xSemaphore = NULL;
 
 // Khởi tạo toàn bộ hệ thống
 void system_init(void) {
@@ -39,37 +43,56 @@ void system_init(void) {
     buzzer_init();                 // Khởi tạo buzzer (GPIO hoặc PWM)
     comm_gpio_init(LED_GPIO, BUTTON_GPIO);  // Khởi tạo LED
     comm_gpio_led_set(0);         // Tắt LED lúc đầu
+
+    // Tạo semaphore để đồng bộ tài nguyên
+    xSemaphore = xSemaphoreCreateMutex();
+    if (xSemaphore == NULL) {
+        ERROR("Không thể tạo semaphore");
+    }
 }
 
 // Task kiểm tra té ngã định kỳ
 void fall_detection_task(void *param) {
+    INFO("Bắt đầu task phát hiện té ngã");
     while (1) {
-        sensor_data_t data = mpu6050_read_data();  // Đọc dữ liệu cảm biến
+        if (xSemaphoreTake(xSemaphore, portMAX_DELAY)) {
+            sensor_data_t data = mpu6050_read_data();  // Đọc dữ liệu cảm biến
 
-        DEBUG("Gia tốc: X=%.2f Y=%.2f Z=%.2f | Gyro: X=%.2f Y=%.2f Z=%.2f",
-              data.accel_x, data.accel_y, data.accel_z,
-              data.gyro_x, data.gyro_y, data.gyro_z);
+            DEBUG("Gia tốc: X=%.2f Y=%.2f Z=%.2f | Gyro: X=%.2f Y=%.2f Z=%.2f",
+                  data.accel_x, data.accel_y, data.accel_z,
+                  data.gyro_x, data.gyro_y, data.gyro_z);
 
-        if (detect_fall(data)) {  // Kiểm tra có té ngã không
-            INFO("Phát hiện té ngã! Gửi cảnh báo...");
-            gps_data_t location = sim4g_gps_get_location(); // Lấy vị trí GPS
-            if (!location.valid) {
-                WARN("Không thể lấy vị trí GPS. SMS sẽ không được gửi.");
+            if (detect_fall(data)) {
+                INFO("Phát hiện té ngã! Gửi cảnh báo...");
+
+                gps_data_t location = sim4g_gps_get_location();  // Lấy vị trí GPS
+
+                // Gửi SMS cảnh báo, kể cả khi không có GPS hợp lệ
+                if (!location.valid) {
+                    WARN("Không thể lấy vị trí GPS. Gửi SMS không có vị trí.");
+                }
+
+                // Gửi SMS cảnh báo (có hoặc không có link GPS)
+                send_fall_alert_sms(&location);  
+
+                buzzer_beep(ALERT_DURATION_MS);  // Bật còi không blocking
+                comm_gpio_led_set(1);            // Bật LED cảnh báo
+                vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));  // Giữ LED sáng
+                comm_gpio_led_set(0);            // Tắt LED
             }
-            send_fall_alert_sms(location);                  // Gửi SMS cảnh báo
 
-            buzzer_beep(ALERT_DURATION_MS);  // Bật còi không blocking
-            comm_gpio_led_set(1);            // Bật LED cảnh báo
-            vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));  // Giữ LED sáng
-            comm_gpio_led_set(0);            // Tắt LED
+            xSemaphoreGive(xSemaphore);  // Giải phóng semaphore
         }
 
-        vTaskDelay(pdMS_TO_TICKS(CHECK_INTERVAL_MS));  // Chờ trước lần kiểm tra tiếp theo
+        vTaskDelay(pdMS_TO_TICKS(CHECK_INTERVAL_MS));  // Kiểm tra lại sau mỗi khoảng thời gian
     }
 }
 
 // Hàm main chạy đầu tiên
 void app_main(void) {
     system_init();  // Thiết lập hệ thống
+
+    sim4g_gps_get_location();  // Gọi GPS một lần đầu
+
     xTaskCreate(fall_detection_task, "fall_task", 4096, NULL, 5, NULL);  // Tạo task kiểm tra té ngã
 }

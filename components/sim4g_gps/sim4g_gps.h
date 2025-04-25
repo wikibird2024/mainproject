@@ -13,4 +13,4 @@ typedef struct {
 void sim4g_gps_init(void);                         // Bật GPS (AT+QGPS=1)
 void sim4g_gps_set_phone_number(const char *num);  // Thiết lập số điện thoại nhận cảnh báo
 gps_data_t sim4g_gps_get_location(void);           // Lấy vị trí GPS (AT+QGPSLOC?)
-void send_fall_alert_sms(gps_data_t location);     // Gửi SMS cảnh báo té ngã (dùng FreeRTOS task)
+void send_fall_alert_sms(const gps_data_t *location);     // Gửi SMS cảnh báo té ngã (dùng FreeRTOS task)
