@@ -10,14 +10,14 @@
 #define DEFAULT_PHONE "+84901234567"
 #define TAG "SIM4G_GPS"
 
-// Mutex bảo vệ GPS
+// Mutex cho lay GPS
 static SemaphoreHandle_t gps_mutex = NULL;
 
-// Số điện thoại và dữ liệu GPS cuối cùng
+// Sdt va du lieu GPS cuoi cung
 static char phone_number[16] = DEFAULT_PHONE;
 static gps_data_t last_location = {0};
 
-// Khởi tạo GPS
+// Khoi tao GPS
 void sim4g_gps_init(void) {
     char response[64];
 
@@ -37,7 +37,7 @@ void sim4g_gps_init(void) {
     }
 }
 
-// Đặt số điện thoại
+// Set SDT
 void sim4g_gps_set_phone_number(const char *number) {
     if (number && strlen(number) < sizeof(phone_number)) {
         strncpy(phone_number, number, sizeof(phone_number) - 1);
@@ -46,7 +46,7 @@ void sim4g_gps_set_phone_number(const char *number) {
     }
 }
 
-// Lấy vị trí GPS
+// Lay tin hieu  GPS
 gps_data_t sim4g_gps_get_location(void) {
     char response[128];
     memset(&last_location, 0, sizeof(last_location));
@@ -56,6 +56,7 @@ gps_data_t sim4g_gps_get_location(void) {
         comm_uart_send_command("AT+QGPSLOC?", response, sizeof(response));
         vTaskDelay(pdMS_TO_TICKS(500));
 
+        //kiem tra gia tri tra ve 
         if (sscanf(response, "+QGPSLOC: %[^,],%[^,],%[^,],%*s",
                    last_location.timestamp,
                    last_location.latitude,
@@ -77,7 +78,7 @@ gps_data_t sim4g_gps_get_location(void) {
     return last_location;
 }
 
-// Hàm gửi tin nhắn SMS từ vị trí GPS
+// Ham gui tin nhan tu vi tri GPS
 void send_fall_alert_sms_inline(const gps_data_t *location) {
     char sms[256];
 
@@ -99,13 +100,13 @@ void send_fall_alert_sms_inline(const gps_data_t *location) {
     comm_uart_send_command(sms, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    comm_uart_send_command("\x1A", NULL, 0);  // Kết thúc tin nhắn
+    comm_uart_send_command("\x1A", NULL, 0);  // Ket thuc tin nhan
     vTaskDelay(pdMS_TO_TICKS(2000));
 
     INFO("SMS sent: %s", sms);
 }
 
-// Task gửi SMS chạy nền
+// Task gui SMS chay nen
 static void sms_task(void *param) {
     gps_data_t *location = (gps_data_t *)param;
     send_fall_alert_sms_inline(location);
