@@ -45,7 +45,6 @@ void system_init(void) {
     }
 //---cac phan khoi tao he thog--
     debugs_init();              // Cấu hình log toàn bộ hệ thống
-
     comm_uart_init();           // UART giao tiếp module SIM
     sim4g_gps_init();           // Bật GPS module SIM
     sim4g_gps_set_phone_number(PHONE_NUMBER);  // SĐT nhận cảnh báo
@@ -60,11 +59,7 @@ void system_init(void) {
     buzzer_init();              // Khởi tạo buzzer (GPIO hoặc PWM)
      // Khởi tạo led_indicator component, truyền chân GPIO led
     led_indicator_init(LED_GPIO);
-
-   
-    
 }
-
 // Task kiểm tra té ngã định kỳ
 void fall_detection_task(void *param) {
     INFO("Bắt đầu task phát hiện té ngã");
