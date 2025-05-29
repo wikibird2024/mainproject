@@ -10,12 +10,12 @@
 static const char *TAG = "buzzer";
 static QueueHandle_t buzzer_queue = NULL;
 
-// Cấu trúc lệnh bật còi
+// Cau truc lenh bat coi
 typedef struct {
     int duration_ms;
 } buzzer_cmd_t;
 
-// Task xử lý bật/tắt còi theo lệnh nhận từ queue
+// Task xử ly bat/tat coi theo lenh tu queue
 static void buzzer_task(void *arg) {
     buzzer_cmd_t cmd;
     while (1) {
@@ -58,7 +58,7 @@ esp_err_t buzzer_beep(int duration_ms) {
         .duration_ms = duration_ms
     };
 
-    if (xQueueSend(buzzer_queue, &cmd, 0) != pdPASS) {
+    if   {
         ESP_LOGW(TAG, "Queue buzzer đầy, bỏ lệnh beep");
         return ESP_FAIL;
     }

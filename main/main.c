@@ -92,6 +92,5 @@ void fall_detection_task(void *param) {
 
 void app_main(void) {
     system_init();  // Thiet lap he thong
-    sim4g_gps_get_location();  // lay gps lan dau
     xTaskCreate(fall_detection_task, "fall_task", 4096, NULL, 5, NULL);  // Tao task kiem tra te nga
 }

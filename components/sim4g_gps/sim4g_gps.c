@@ -81,18 +81,6 @@ gps_data_t sim4g_gps_get_location(void) {
 // Ham gui tin nhan tu vi tri GPS
 void send_fall_alert_sms_inline(const gps_data_t *location) {
     char sms[256];
-
-    if (location->valid) {
-        snprintf(sms, sizeof(sms),
-                 "Fall detected! Location: %s, %s\n"
-                 "View on map: https://www.google.com/maps?q=%s,%s",
-                 location->latitude, location->longitude,
-                 location->latitude, location->longitude);
-    } else {
-        snprintf(sms, sizeof(sms), "Fall detected! Location unknown.");
-    }
-
-    char cmd[32];
     snprintf(cmd, sizeof(cmd), "AT+CMGS=\"%s\"", phone_number);
     comm_uart_send_command(cmd, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
