@@ -5,7 +5,7 @@
 
 #define TAG "MPU6050"                    // Tag dùng cho ESP_LOG
 #define I2C_MASTER_NUM I2C_NUM_0         //Số bus I2C dùng (I2C0)
-static const float FALL_THRESHOLD = 0.6f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
+static const float FALL_THRESHOLD = 1.3f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
 static const float ACCEL_SCALE_FACTOR = 16384.0f;  // Hệ số tỉ lệ cho gia tốc (raw -> g)
 static const float GYRO_SCALE_FACTOR = 131.0f;     // Hệ số tỉ lệ cho gyro (raw -> độ/giây)
 #define COMBINE_BYTES(msb, lsb) ((int16_t)(((msb) << 8) | (lsb))) // Ghép 2 byte thành int16_t
@@ -54,18 +54,20 @@ esp_err_t mpu6050_read_data(sensor_data_t *data) {
 }
 
 bool detect_fall(sensor_data_t data) {
-    // Tính độ lớn vector gia tốc 3 chiều: sqrt(x^2 + y^2 + z^2)
+    // Tính độ lớn vector gia tốc (bỏ qua trọng lực)
     float acc_magnitude = sqrt(
         data.accel_x * data.accel_x +
         data.accel_y * data.accel_y +
         data.accel_z * data.accel_z
     );
-    ESP_LOGI(TAG, "Accelerometer magnitude: %.2f", acc_magnitude);
     
-    // Ngưỡng phát hiện té ngã, có thể điều chỉnh lại phù hợp với magnitude thực
-    if (acc_magnitude < FALL_THRESHOLD) { // thử nghiệm với 0.6g
-        ESP_LOGW(TAG, "Fall detected! Acceleration magnitude: %.2f", acc_magnitude);
+    ESP_LOGI(TAG, "Accel magnitude: %.2f g", acc_magnitude);
+
+    // Phát hiện té ngã khi vượt ngưỡng
+    if (acc_magnitude > FALL_THRESHOLD) {
+        ESP_LOGW(TAG, "Fall detected! (%.2f g)", acc_magnitude);
         return true;
     }
+    
     return false;
 }
