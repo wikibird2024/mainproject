@@ -8,7 +8,7 @@
 #include "buzzer.h"
 #include "comm.h"
 #include "debugs.h"
-
+#include "led_indicator.h"
 // Đinh nghia chan ket noi
 #define LED_GPIO    2           // GPIO dieu khien led canh bao
 #define BUTTON_GPIO -1          // Khong su dung nut nhan
