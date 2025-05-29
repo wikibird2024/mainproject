@@ -8,16 +8,16 @@
 
 #define TAG "COMM"
 
-// UART cấu hình
+// UART Cau hinh
 #define UART_NUM UART_NUM_1
 #define UART_TX_PIN 17
 #define UART_RX_PIN 16
 
-// I2C cấu hình
+// I2C Cau hinh
 #define I2C_MASTER_SCL 22
 #define I2C_MASTER_SDA 21
 
-// PWM cấu hình
+// PWM Cau hinh
 static int pwm_pin = -1;
 
 // GPIO LED & BUTTON
@@ -90,7 +90,7 @@ esp_err_t comm_i2c_read(uint8_t device_addr, uint8_t reg_addr, uint8_t *data) {
     return i2c_master_write_read_device(I2C_NUM_0, device_addr, &reg_addr, 1, data, 1, 100 / portTICK_PERIOD_MS);
 }
 
-// ======== PWM (Buzzer) ========
+// ======== PWM (Buzzer or Led ) ========
 esp_err_t comm_pwm_init(int pin, int frequency) {
     if (pin < 0) return ESP_ERR_INVALID_ARG;
     pwm_pin = pin;
