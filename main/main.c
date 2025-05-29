@@ -27,7 +27,7 @@ static SemaphoreHandle_t xSemaphore = NULL;
 void system_init(void) {
     INFO("Khởi tạo hệ thống...");
 
-    debugs_init();  // Cau hinhlog toan bo he thong
+    debugs_init();  // Cau hinh log toan bo he thong
 
     comm_uart_init();               // UART giao tiep module SIM
     sim4g_gps_init();              // bat GPS module SIM
