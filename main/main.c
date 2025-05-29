@@ -61,7 +61,7 @@ void system_init(void) {
     led_indicator_init(LED_GPIO);
 
    
-    }
+    
 }
 
 // Task kiểm tra té ngã định kỳ
