@@ -5,7 +5,7 @@
 
 #define TAG "MPU6050"                    // Tag dùng cho ESP_LOG
 #define I2C_MASTER_NUM I2C_NUM_0         //Số bus I2C dùng (I2C0)
-static const float FALL_THRESHOLD = 1.3f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
+static const float FALL_THRESHOLD = 0.7f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
 static const float GRAVITY =1.0f;              // Giá trị trọng lực mong đợi 1g
 static const float ACCEL_SCALE_FACTOR = 16384.0f;  // Hệ số tỉ lệ cho gia tốc (raw -> g)
 static const float GYRO_SCALE_FACTOR = 131.0f;     // Hệ số tỉ lệ cho gyro (raw -> độ/giây)
@@ -62,13 +62,13 @@ bool detect_fall(sensor_data_t data) {
         data.accel_z * data.accel_z
     );
     
-    ESP_LOGI(TAG, "Accel magnitude: %.2f g", acc_magnitude);
+     float acc_delta = fabs(acc_magnitude - 1.0f); // Lệch so với trọng lực
 
-    // Phát hiện té ngã khi vượt ngưỡng
-    if (acc_magnitude > FALL_THRESHOLD) {
-        ESP_LOGW(TAG, "Fall detected! (%.2f g)", acc_magnitude);
+    ESP_LOGI(TAG, "Accel magnitude: %.2f g, acc_delta: %.2f g", acc_magnitude, acc_delta);
+
+    if (acc_delta > FALL_THRESHOLD) {
+        ESP_LOGW(TAG, "Fall detected! (delta=%.2f g)", acc_delta);
         return true;
     }
-    
     return false;
 }
