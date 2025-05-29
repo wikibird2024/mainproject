@@ -17,7 +17,7 @@ static SemaphoreHandle_t gps_mutex = NULL;
 static char phone_number[16] = DEFAULT_PHONE;
 
 // Lưu vị trí GPS cuối cùng (private)
-static gps_data_t last_location = {0};
+static sim4g_gps_data_t last_location = {0};
 
 // Khởi tạo GPS: bật GPS và cấu hình
 void sim4g_gps_init(void) {
@@ -59,7 +59,7 @@ void sim4g_gps_set_phone_number(const char *number) {
 }
 
 // Lấy vị trí GPS hiện tại
-gps_data_t sim4g_gps_get_location(void) {
+sim4g_gps_data_t sim4g_gps_get_location(void) {
     char response[128] = {0};
     memset(&last_location, 0, sizeof(last_location));
     last_location.valid = false;
@@ -97,7 +97,7 @@ gps_data_t sim4g_gps_get_location(void) {
 }
 
 // Gửi SMS cảnh báo té ngã (thực hiện gửi inline)
-static void send_fall_alert_sms_inline(const gps_data_t *location) {
+static void send_fall_alert_sms_inline(const sim4g_gps_data_t *location) {
     if (location == NULL || !location->valid) {
         ERROR("Invalid GPS location data");
         return;
@@ -127,7 +127,7 @@ static void send_fall_alert_sms_inline(const gps_data_t *location) {
 
 // Task gửi SMS chạy nền
 static void sms_task(void *param) {
-    gps_data_t *location = (gps_data_t *)param;
+    sim4g_gps_data_t *location = (sim4g_gps_data_t *)param;
     if (location != NULL) {
         send_fall_alert_sms_inline(location);
         vPortFree(location);
@@ -138,13 +138,13 @@ static void sms_task(void *param) {
 }
 
 // Tạo task gửi SMS cảnh báo té ngã không làm blocking
-void send_fall_alert_sms(const gps_data_t *location) {
+void send_fall_alert_sms(const sim4g_gps_data_t *location) {
     if (location == NULL || !location->valid) {
         ERROR("Invalid GPS location input for SMS");
         return;
     }
 
-    gps_data_t *copy = pvPortMalloc(sizeof(gps_data_t));
+    sim4g_gps_data_t *copy = pvPortMalloc(sizeof(sim4g_gps_data_t));
     if (copy == NULL) {
         ERROR("Memory allocation failed for SMS task");
         return;

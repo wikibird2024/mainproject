@@ -76,7 +76,7 @@ void fall_detection_task(void *param) {
                 if (detect_fall(data)) {
                     INFO("Phát hiện té ngã! Gửi cảnh báo...");
 
-                    gps_data_t location = sim4g_gps_get_location();
+                    sim4g_gps_data_t location = sim4g_gps_get_location();
 
                     if (!location.valid) {
                         WARN("Không thể lấy vị trí GPS. Gửi SMS không có vị trí.");
@@ -86,12 +86,9 @@ void fall_detection_task(void *param) {
 
                     buzzer_beep(ALERT_DURATION_MS);
                     // Dùng hàm nháy led của led_indicator
-                    led_indicator_blink(ALERT_DURATION_MS);
+                    led_indicator_start_blink(ALERT_DURATION_MS);
 
-                    // Nếu  không muốn nháy, mà chỉ bật rồi tắt:
-                    // led_indicator_on();
-                    // vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
-                    // led_indicator_off();
+                    
                 }
             } else {
                 ERROR("Không đọc được dữ liệu từ MPU6050");
