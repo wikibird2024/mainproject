@@ -84,5 +84,5 @@ Vi tri: Lat: 10.762622, Lon: 106.660172
 
 ##  Giay phep
 
-Du an duoc cap phep theo MIT License
+Du an duoc cap phep theo MIT License (Massachusetts Institute of Technology – MIT).
 
