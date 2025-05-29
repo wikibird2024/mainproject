@@ -2,13 +2,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-
+#include "esp_system.h"
 #include "mpu6050.h"
 #include "sim4g_gps.h"
 #include "buzzer.h"
 #include "comm.h"
 #include "debugs.h"
 #include "led_indicator.h"
+
 
 // Định nghĩa chân kết nối
 #define LED_GPIO    2           // GPIO điều khiển led cảnh báo
@@ -26,7 +27,22 @@ static SemaphoreHandle_t xMutex = NULL;
 // Khởi tạo toàn bộ hệ thống
 void system_init(void) {
     INFO("Khởi tạo hệ thống...");
+    
+ // --- Tạo mutex với cơ chế retry ---
+    const int max_retry = 3;
+    for (int i = 0; i < max_retry; i++) {
+        xMutex = xSemaphoreCreateMutex();
+        if (xMutex != NULL) break;
+        WARN("Tạo semaphore thất bại, thử lại (%d/%d)", i + 1, max_retry);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 
+    if (xMutex == NULL) {
+        ERROR("Không thể tạo semaphore sau %d lần thử. Khởi động lại hệ thống.", max_retry);
+        vTaskDelay(pdMS_TO_TICKS(500));  // chờ để log được in ra hết
+        esp_restart();  // reset thiết bị
+    }
+//---cac phan khoi tao he thog--
     debugs_init();              // Cấu hình log toàn bộ hệ thống
 
     comm_uart_init();           // UART giao tiếp module SIM
@@ -41,13 +57,10 @@ void system_init(void) {
     }
 
     buzzer_init();              // Khởi tạo buzzer (GPIO hoặc PWM)
-    comm_gpio_init(LED_GPIO, BUTTON_GPIO);  // Khởi tạo LED
-    comm_gpio_led_set(0);       // Tắt LED ban đầu
+     // Khởi tạo led_indicator component, truyền chân GPIO led
+    led_indicator_init(LED_GPIO);
 
-    // Tạo semaphore đồng bộ tài nguyên (mutex)
-    xMutex = xSemaphoreCreateMutex();
-    if (xMutex == NULL) {
-        ERROR("Không thể tạo semaphore");
+   
     }
 }
 
@@ -76,9 +89,13 @@ void fall_detection_task(void *param) {
                     send_fall_alert_sms(&location);
 
                     buzzer_beep(ALERT_DURATION_MS);
-                    comm_gpio_led_set(1);
-                    vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
-                    comm_gpio_led_set(0);
+                    // Dùng hàm nháy led của led_indicator
+                    led_indicator_blink(ALERT_DURATION_MS);
+
+                    // Nếu  không muốn nháy, mà chỉ bật rồi tắt:
+                    // led_indicator_on();
+                    // vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
+                    // led_indicator_off();
                 }
             } else {
                 ERROR("Không đọc được dữ liệu từ MPU6050");
