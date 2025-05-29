@@ -4,6 +4,7 @@
 #include <math.h>
 
 #define TAG "MPU6050"                    // Tag dùng cho ESP_LOG
+
 #define I2C_MASTER_NUM I2C_NUM_0         //Số bus I2C dùng (I2C0)
 static const float FALL_THRESHOLD = 0.7f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
 static const float GRAVITY =1.0f;              // Giá trị trọng lực mong đợi 1g
@@ -34,6 +35,11 @@ esp_err_t mpu6050_init(void) {
 }
 
 esp_err_t mpu6050_read_data(sensor_data_t *data) {
+    if (data == NULL) {
+        ESP_LOGE(TAG, "Null pointer passed to mpu6050_read_data");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     uint8_t raw[14];    // 14 byte gồm accel(6), temp(2), gyro(6)
     esp_err_t ret = i2c_read(MPU6050_ADDR, MPU6050_ACCEL_XOUT_H, raw, sizeof(raw));
     if (ret != ESP_OK) {
@@ -62,7 +68,8 @@ bool detect_fall(sensor_data_t data) {
         data.accel_z * data.accel_z
     );
     
-     float acc_delta = fabs(acc_magnitude - 1.0f); // Lệch so với trọng lực
+     float acc_delta = fabs(acc_magnitude - 1.0f); // Tính độ lớn vector gia tốc, rồi lấy sai lệch so với trọng lực 1g
+
 
     ESP_LOGI(TAG, "Accel magnitude: %.2f g, acc_delta: %.2f g", acc_magnitude, acc_delta);
 
