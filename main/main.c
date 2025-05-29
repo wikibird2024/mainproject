@@ -19,7 +19,8 @@
 #define CHECK_INTERVAL_MS 1000  // kiểm tra té ngã mỗi 1000ms
 #define ALERT_DURATION_MS 5000  // Thời gian cảnh báo
 
-#define PHONE_NUMBER "+84559865843"
+static const char *PHONE_NUMBER = "+84559865843";
+
 
 // Semaphore (mutex) để đồng bộ tài nguyên chung
 static SemaphoreHandle_t xMutex = NULL;
