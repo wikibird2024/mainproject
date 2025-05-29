@@ -58,7 +58,7 @@ esp_err_t buzzer_beep(int duration_ms) {
         .duration_ms = duration_ms
     };
 
-    if   {
+    if (xQueueSend(buzzer_queue, &cmd, 0) != pdPASS){
         ESP_LOGW(TAG, "Queue buzzer đầy, bỏ lệnh beep");
         return ESP_FAIL;
     }

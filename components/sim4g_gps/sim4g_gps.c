@@ -20,7 +20,7 @@ static gps_data_t last_location = {0};
 // Khoi tao GPS
 void sim4g_gps_init(void) {
     char response[64];
-
+    char cmd[64];  // 
     if (gps_mutex == NULL) {
         gps_mutex = xSemaphoreCreateMutex();
     }
@@ -81,9 +81,17 @@ gps_data_t sim4g_gps_get_location(void) {
 // Ham gui tin nhan tu vi tri GPS
 void send_fall_alert_sms_inline(const gps_data_t *location) {
     char sms[256];
+    char cmd[64];
     snprintf(cmd, sizeof(cmd), "AT+CMGS=\"%s\"", phone_number);
     comm_uart_send_command(cmd, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    // gan noi dung itn nhan
+    snprintf(sms, sizeof(sms),
+                "Fall detected!\nLocation:\nLat: %s\nLon: %s\nTime: %s",
+             location->latitude,
+             location->longitude,
+             location->timestamp);
 
     comm_uart_send_command(sms, NULL, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
