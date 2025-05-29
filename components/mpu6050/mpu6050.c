@@ -6,6 +6,7 @@
 #define TAG "MPU6050"                    // Tag dùng cho ESP_LOG
 #define I2C_MASTER_NUM I2C_NUM_0         //Số bus I2C dùng (I2C0)
 static const float FALL_THRESHOLD = 1.3f;      // Ngưỡng magnitude gia tốc (g) để phát hiện té ngã
+static const float GRAVITY =1.0f;              // Giá trị trọng lực mong đợi 1g
 static const float ACCEL_SCALE_FACTOR = 16384.0f;  // Hệ số tỉ lệ cho gia tốc (raw -> g)
 static const float GYRO_SCALE_FACTOR = 131.0f;     // Hệ số tỉ lệ cho gyro (raw -> độ/giây)
 #define COMBINE_BYTES(msb, lsb) ((int16_t)(((msb) << 8) | (lsb))) // Ghép 2 byte thành int16_t
