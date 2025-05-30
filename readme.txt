@@ -6,26 +6,28 @@ Du an nay su dung ESP32, cam bien MPU6050 va module Quectel EC800K 4G-GPS de pha
 
 ```
 mainproject/
-├── main/                 # Vong lap chinh dieu khien he thong
+├── main/                 # Vong lap chinh dieu khien he thong chua cac logic chinh va task cua chuong trinh
 ├── components/
-│   ├── buzzer/           # Dieu khien buzzer canh bao qua GPIO
+│   ├── buzzer/           # Dieu khien buzzer va coi canh bao qua GPIO
 │   ├── comm/             # Khoi tao UART va I2C
+|   ├── led_indicator/    # Khoi dieu khien led
 │   ├── debugs/           # In thong tin debug ra serial
 │   ├── mpu6050/          # Doc du lieu tu cam bien
-│   └── sim4g_gps/        # Giao tiep AT voi module EC800K
+│   └── sim4g_gps/        # Giao tiep AT (gps, sms..) voi module EC800K
 ```
 
 ##  Tinh nang
 
 - Phat hien te nga bang cam bien gia toc/goc
 - Kich hoat buzzer canh bao
+- kich hoat led nhay canh bao
 - Lay toa do GPS qua module 4G
-- Gui tin nhan SMS chua vi tri hien tai
+- Gui tin nhan SMS chua vi tri hien tai, neu khong lay duoc vi tri van gui tn
 - Cau truc du an chuyen nghiep, chia module ro rang
 
 ##  Phan cung can thiet
 
-- ESP32 DevKit
+- ESP32 DevKit C
 - Cam bien MPU6050 (I2C)
 - Module 4G-GPS Quectel EC800K (UART)
 - Buzzer kich hoat GPIO
@@ -44,6 +46,7 @@ cd mainproject
 3. Build va flash:
 
 ```bash
+idf.py fullclean
 idf.py set-target esp32
 idf.py menuconfig
 idf.py build
@@ -57,6 +60,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 - **mpu6050**: Doc du lieu raw tu cam bien MPU6050 bang I2C
 - **sim4g_gps**: Giao tiep voi module EC800K de lay GPS va gui SMS
 - **buzzer**: Dieu khien am thanh canh bao
+- **led_indicator**: Dieu khien led
 - **comm**: Khoi tao UART va I2C
 - **debugs**: Ghi log thong tin ra serial
 
@@ -83,7 +87,6 @@ Vi tri: Lat: 10.762622, Lon: 106.660172
 - Them chuc nang gui du lieu qua HTTP
 
 ##  Giay phep
-Tran Hao
-
+Original author: Tran Hao
 Du an duoc cap phep theo MIT License (Massachusetts Institute of Technology – MIT).
 
