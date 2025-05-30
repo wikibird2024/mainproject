@@ -1,3 +1,15 @@
+/**
+ * @file debugs.c
+ * @brief Module xử lý log và debug định kỳ cho hệ thống.
+ *
+ * Cung cấp khả năng ghi log theo thời gian thực, kiểm tra trạng thái hệ thống
+ * và hỗ trợ tắt/bật log định kỳ thông qua FreeRTOS task.
+ *
+ * Cấu hình có thể bật/tắt qua menuconfig:
+ * - CONFIG_DEBUGS_ENABLE_LOG
+ * - CONFIG_DEBUGS_ENABLE_PERIODIC_LOG
+ * - CONFIG_DEBUGS_LOG_INTERVAL_MS
+ */
 #include "debugs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

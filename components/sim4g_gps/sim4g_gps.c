@@ -18,7 +18,7 @@
 #define DO_MẠNH_TIN_HIEU_TOI_THIEU    5
 #define SO_LAN_THU_SMS_TOI_DA          3
 #define KICH_THUOC_BUFFER_PHAN_HOI     256
-
+#define SIM4G_GPS_RESPONSE_BUFFER_SIZE  256
 // -----------------------------------------------------------------------------
 // Biến tĩnh nội bộ
 // -----------------------------------------------------------------------------
@@ -315,7 +315,7 @@ sim4g_gps_data_t sim4g_gps_get_location(void)
  * 
  * @param vi_tri Dữ liệu vị trí GPS
  */
-void sim4g_gps_send_fall_alert_async(sim4g_gps_data_t *vi_tri)
+void sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *vi_tri)
 {
     if (vi_tri == NULL || !vi_tri->valid) {
         ERROR("Dữ liệu GPS không hợp lệ, không gửi SMS");

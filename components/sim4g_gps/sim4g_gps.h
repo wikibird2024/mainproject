@@ -22,7 +22,9 @@ extern "C" {
  */
 typedef struct {
     char latitude[SIM4G_GPS_STRING_MAX_LEN];   ///< Vĩ độ dưới dạng chuỗi ký tự
-    char longitude[SIM4G_GPS_STRING_MAX_LEN];  ///< Kinh độ dưới dạng chuỗi ký tự
+    char lat_dir[2];                          ///< Hướng vĩ độ ('N' hoặc 'S')
+    char longitude[SIM4G_GPS_STRING_MAX_LEN];  ///< Kinh độ dưới dạng chuỗi ký tự  
+    char lon_dir[2];                          ///< Hướng kinh độ ('E' hoặc 'W')
     char timestamp[SIM4G_GPS_STRING_MAX_LEN];  ///< Thời gian lấy dữ liệu GPS
     bool valid;                                ///< Trạng thái dữ liệu hợp lệ hay không
 } sim4g_gps_data_t;
@@ -52,4 +54,4 @@ void sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location);
 
 #ifdef __cplusplus
 }
-#endifendif
+#endif
