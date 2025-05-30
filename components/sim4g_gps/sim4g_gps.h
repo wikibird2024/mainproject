@@ -52,4 +52,4 @@ void sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location);
 
 #ifdef __cplusplus
 }
-#endif
+#endifendif

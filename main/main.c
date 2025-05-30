@@ -22,7 +22,6 @@
 #include "debugs.h"
 #include "led_indicator.h"
 
-<<<<<<< HEAD
 // --- Định nghĩa các chân GPIO và hằng số cấu hình ---
 
 #define LED_GPIO           2           /**< Chân GPIO kết nối LED chỉ thị */
@@ -32,6 +31,9 @@
 #define LED_BLINK_PERIOD   100         /**< Chu kỳ nháy LED khi cảnh báo (ms) */
 
 static const char *PHONE_NUMBER = "+84559865843"; /**< Số điện thoại nhận SMS cảnh báo */
+
+
+// --- Định nghĩa các loại sự kiện hệ thống ---
 
 typedef enum {
     FALL_DETECTED  /**< Sự kiện phát hiện té ngã */
