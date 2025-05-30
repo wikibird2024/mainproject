@@ -83,6 +83,7 @@ Vi tri: Lat: 10.762622, Lon: 106.660172
 - Them chuc nang gui du lieu qua HTTP
 
 ##  Giay phep
+Tran Hao
 
 Du an duoc cap phep theo MIT License (Massachusetts Institute of Technology – MIT).
 
