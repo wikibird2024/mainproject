@@ -3,66 +3,52 @@
 /**
  * @file sim4g_gps.h
  * @brief API điều khiển module SIM 4G GPS để lấy vị trí và gửi cảnh báo SMS.
- *
- * Module cung cấp các hàm khởi tạo GPS, lấy dữ liệu GPS, thiết lập số điện thoại
- * và gửi tin nhắn cảnh báo khi phát hiện sự cố.
  */
 
 #include <stdbool.h>
-#include <stddef.h>  // Nếu có dùng size_t, ở đây chưa cần
-#include <stdint.h>  // Nếu có dùng kiểu số chuẩn, ở đây chưa cần
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/// Kích thước tối đa cho chuỗi chứa dữ liệu GPS như latitude, longitude, timestamp
-#define SIM4G_GPS_STRING_MAX_LEN 20
-#define SIM4G_GPS_PHONE_MAX_LEN  16
+/// Độ dài tối đa cho chuỗi GPS (vĩ độ, kinh độ, thời gian)
+#define SIM4G_GPS_STRING_MAX_LEN  20
+
+/// Độ dài tối đa cho số điện thoại (kể cả ký tự '+', không tính '\0')
+#define SIM4G_GPS_PHONE_MAX_LEN   16
 
 /**
- * @brief Struct dữ liệu vị trí GPS lấy được từ module.
- *
- * Chứa vĩ độ, kinh độ và timestamp theo chuẩn UTC.
- * Trường `valid` báo hiệu dữ liệu GPS có hợp lệ hay không.
+ * @brief Struct chứa dữ liệu GPS lấy từ module SIM 4G.
  */
 typedef struct {
-    char latitude[SIM4G_GPS_STRING_MAX_LEN];   /**< Vĩ độ dạng chuỗi */
-    char longitude[SIM4G_GPS_STRING_MAX_LEN];  /**< Kinh độ dạng chuỗi */
-    char timestamp[SIM4G_GPS_STRING_MAX_LEN];  /**< Thời gian UTC dạng chuỗi */
-    bool valid;                                /**< Flag báo dữ liệu hợp lệ */
+    char latitude[SIM4G_GPS_STRING_MAX_LEN];   ///< Vĩ độ dưới dạng chuỗi ký tự
+    char longitude[SIM4G_GPS_STRING_MAX_LEN];  ///< Kinh độ dưới dạng chuỗi ký tự
+    char timestamp[SIM4G_GPS_STRING_MAX_LEN];  ///< Thời gian lấy dữ liệu GPS
+    bool valid;                                ///< Trạng thái dữ liệu hợp lệ hay không
 } sim4g_gps_data_t;
 
 /**
- * @brief Khởi tạo module GPS, bật GPS trên module SIM 4G.
- *
- * Gửi lệnh AT để cấu hình và bật GPS.
- * Nên gọi hàm này một lần khi khởi động hệ thống.
+ * @brief Khởi tạo module SIM 4G GPS (gửi lệnh AT bật GPS).
  */
 void sim4g_gps_init(void);
 
 /**
- * @brief Thiết lập số điện thoại nhận tin nhắn cảnh báo.
- *
- * @param[in] phone_number Chuỗi số điện thoại dạng "+84901234567", tối đa 15 ký tự (không tính '\0').
+ * @brief Thiết lập số điện thoại nhận cảnh báo SMS.
+ * @param phone_number Chuỗi số điện thoại ví dụ "+84901234567"
  */
 void sim4g_gps_set_phone_number(const char *phone_number);
 
 /**
- * @brief Lấy dữ liệu vị trí GPS hiện tại từ module.
- *
- * @return Dữ liệu GPS với flag `valid` để biết vị trí hợp lệ hay không.
+ * @brief Lấy dữ liệu vị trí GPS hiện tại.
+ * @return Struct chứa tọa độ, thời gian và trạng thái hợp lệ
  */
 sim4g_gps_data_t sim4g_gps_get_location(void);
 
 /**
- * @brief Gửi tin nhắn SMS cảnh báo té ngã với vị trí GPS hiện tại.
- *
- * Hàm tạo một task riêng để gửi SMS không gây block luồng chính.
- *
- * @param[in] location Con trỏ tới dữ liệu GPS hợp lệ dùng để gửi tin nhắn.
+ * @brief Gửi SMS cảnh báo té ngã kèm vị trí GPS, chạy task gửi SMS bất đồng bộ.
+ * @param location Con trỏ tới dữ liệu GPS hợp lệ
  */
-void send_fall_alert_sms(const sim4g_gps_data_t *location);
+void sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location);
 
 #ifdef __cplusplus
 }
