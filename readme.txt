@@ -76,8 +76,9 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ##  Vi du SMS
 
 ```
-CANH BAO: Phat hien te nga!
-Vi tri: Lat: 10.762622, Lon: 106.660172
+CANH BAO: Te nga!
+Vi tri: https://maps.google.com/?q=10.823456,106.629654
+Thoi gian: 2023-12-15 14:30:45
 ```
 
 ##  Dinh huong mo rong
