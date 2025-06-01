@@ -1,4 +1,4 @@
-Kiểm tra đoạn code sau .#include "sim4g_gps.h"
+#include "sim4g_gps.h"
 #include "comm.h"
 #include "debugs.h"
 #include <string.h>
