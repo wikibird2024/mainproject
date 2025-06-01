@@ -23,21 +23,19 @@
 #define MAX_SMS_RETRY_COUNT         3
 #define RESPONSE_BUFFER_SIZE        256
 #define RETRY_DELAY_MS              500
-#define MAX_PHONE_NUMBER_LEN        15
 #define SMS_BUFFER_SIZE             200
 #define MUTEX_TIMEOUT_MS            1000
 #define GPS_LOCATION_RETRY_INTERVAL_MS 1000
 #define SMS_RETRY_INTERVAL_MS       1200
 #define SMS_CONFIG_DELAY_MS         200
 #define SMS_RECIPIENT_DELAY_MS      300
+#define LOCATION_VALIDITY_MS        300000 // 5 phút
+#define MAX_SMS_TASKS               2
 
 // GPS validation constants
 #define GPS_COORD_MIN_LENGTH        8
 #define GPS_COORD_MAX_LENGTH        12
 #define GPS_COORDINATE_PRECISION    5
-#define MAX_GPS_TIMESTAMP_LEN      15
-#define MAX_GPS_LAT_LON_LEN        12
-#define MAX_GPS_DIR_LEN             2
 
 // Task configuration
 #define SMS_TASK_STACK_SIZE         4096
@@ -62,25 +60,23 @@
 #define LOG_IF_ERROR(condition, message) do { if (!(condition)) { ERROR(message); } } while(0)
 #define SAFE_FREE(ptr) do { if (ptr) { vPortFree(ptr); ptr = NULL; } } while(0)
 
-// Enhanced error codes
-typedef enum {
-    SIM4G_SUCCESS = 0,
-    SIM4G_ERROR_MUTEX = -1,
-    SIM4G_ERROR_COMM_NOT_READY = -2,
-    SIM4G_ERROR_NETWORK = -3,
-    SIM4G_ERROR_GPS_TIMEOUT = -4,
-    SIM4G_ERROR_SMS_SEND = -5,
-    SIM4G_ERROR_INVALID_DATA = -6,
-    SIM4G_ERROR_MEMORY = -7,
-    SIM4G_ERROR_INVALID_PARAM = -8
-} sim4g_error_t;
-
 // Global variables
 static SemaphoreHandle_t gps_mutex = NULL;
-static char phone_number[MAX_PHONE_NUMBER_LEN + 1] = DEFAULT_PHONE_NUMBER;
+static char phone_number[SIM4G_GPS_PHONE_MAX_LEN] = DEFAULT_PHONE_NUMBER;
 static sim4g_gps_data_t last_known_location = {0};
+static TickType_t last_updated = 0; // Thời gian cập nhật last_known_location
 static atomic_bool is_gps_cold_start = true;
+static atomic_uint sms_task_count = ATOMIC_VAR_INIT(0);
 static char _temp_buffer[RESPONSE_BUFFER_SIZE];
+static uint32_t gps_cold_start_timeout_ms = COLD_START_TIME_MS;
+static uint32_t gps_normal_timeout_ms = NORMAL_OPERATION_TIME_MS;
+static uint32_t network_check_timeout_ms = NETWORK_CHECK_TIME_MS;
+
+// Struct for SMS task parameters
+typedef struct {
+    sim4g_gps_data_t *location;
+    sms_callback_t callback;
+} sms_task_params_t;
 
 // =============================================================================
 // Private Function Implementations
@@ -109,7 +105,7 @@ static inline bool _take_mutex() {
     if (!_ensure_mutex()) {
         return false;
     }
-    return (xSemaphoreTake(gps_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE;
+    return (xSemaphoreTake(gps_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE);
 }
 
 static comm_result_t _send_at_command(const char* cmd, char* response, size_t response_size, 
@@ -123,7 +119,6 @@ static comm_result_t _send_at_command(const char* cmd, char* response, size_t re
     char* resp_buffer = response ? response : _temp_buffer;
     size_t resp_size = response ? response_size : sizeof(_temp_buffer);
     
-    // Ensure buffer is initialized
     if (resp_buffer && resp_size > 0) {
         resp_buffer[0] = '\0';
     }
@@ -167,19 +162,16 @@ static bool _validate_gps_coordinate(const char* coord, char direction) {
         return false;
     }
     
-    // Validate direction
     if (direction != 'N' && direction != 'S' && direction != 'E' && direction != 'W') {
         return false;
     }
     
-    // Check for valid numeric characters
     for (size_t i = 0; i < len; i++) {
         if (!(coord[i] == '.' || (coord[i] >= '0' && coord[i] <= '9'))) {
             return false;
         }
     }
     
-    // Convert and validate range
     float decimal = _convert_dmm_to_decimal(coord, direction);
     if (direction == 'N' || direction == 'S') {
         return (decimal >= -90.0f && decimal <= 90.0f);
@@ -211,13 +203,23 @@ static bool _check_at_response(const char* resp) {
     bool has_cmgs = strstr(resp, "+CMGS:") != NULL;
     bool has_error = strstr(resp, "ERROR") != NULL;
     
-    return (has_ok || has_cmgs) && !has_error;
+    if (has_error) {
+        int error_code = 0;
+        if (sscanf(resp, "+CME ERROR: %d", &error_code) == 1 ||
+            sscanf(resp, "+CMS ERROR: %d", &error_code) == 1) {
+            ERROR("AT command failed with error code: %d", error_code);
+        } else {
+            ERROR("AT command failed with unknown error: %s", resp);
+        }
+        return false;
+    }
+    
+    return has_ok || has_cmgs;
 }
 
 static bool _check_network_status(void) {
     DEBUG("Checking network registration status");
     
-    // Check network registration
     int mode = 0, status = 0;
     bool is_registered = false;
     
@@ -229,7 +231,6 @@ static bool _check_network_status(void) {
         }
     }
 
-    // Check signal strength
     int rssi = 0;
     if (_send_at_command(AT_CMD_SIGNAL_STRENGTH, _temp_buffer, sizeof(_temp_buffer), 1, 0) == COMM_SUCCESS) {
         if (sscanf(_temp_buffer, "+CSQ: %d", &rssi) == 1) {
@@ -261,6 +262,22 @@ static bool _format_alert_message(char* buffer, size_t size, const sim4g_gps_dat
     return true;
 }
 
+static bool _validate_phone_number(const char *phone_number) {
+    RETURN_IF(!phone_number, false);
+    size_t len = strlen(phone_number);
+    RETURN_IF(len == 0 || len > SIM4G_GPS_PHONE_MAX_LEN - 1, false);
+
+    if (phone_number[0] != '+' && (phone_number[0] < '0' || phone_number[0] > '9')) {
+        return false;
+    }
+    for (size_t i = 1; i < len; i++) {
+        if (phone_number[i] < '0' || phone_number[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool _get_current_phone_number(char* buffer, size_t size) {
     RETURN_IF(!buffer || size == 0, false);
     
@@ -277,25 +294,23 @@ static bool _get_current_phone_number(char* buffer, size_t size) {
 static bool _parse_gps_response(const char* response, sim4g_gps_data_t* location) {
     RETURN_IF(!response || !location, false);
     
-    char timestamp[MAX_GPS_TIMESTAMP_LEN + 1] = {0};
-    char latitude[MAX_GPS_LAT_LON_LEN + 1] = {0};
-    char lat_dir[MAX_GPS_DIR_LEN + 1] = {0};
-    char longitude[MAX_GPS_LAT_LON_LEN + 1] = {0};
-    char lon_dir[MAX_GPS_DIR_LEN + 1] = {0};
+    char timestamp[SIM4G_GPS_STRING_MAX_LEN] = {0};
+    char latitude[SIM4G_GPS_STRING_MAX_LEN] = {0};
+    char lat_dir[2] = {0};
+    char longitude[SIM4G_GPS_STRING_MAX_LEN] = {0};
+    char lon_dir[2] = {0};
     
-    int parsed = sscanf(response, "+QGPSLOC: %15[^,],%12[^,],%2[^,],%12[^,],%2[^,]",
+    int parsed = sscanf(response, "+QGPSLOC: %19[^,],%19[^,],%1[^,],%19[^,],%1[^,]",
         timestamp, latitude, lat_dir, longitude, lon_dir);
         
     RETURN_IF(parsed != 5, false);
     
-    // Copy parsed values to location structure
     strncpy(location->timestamp, timestamp, sizeof(location->timestamp) - 1);
     strncpy(location->latitude, latitude, sizeof(location->latitude) - 1);
     strncpy(location->lat_dir, lat_dir, sizeof(location->lat_dir) - 1);
     strncpy(location->longitude, longitude, sizeof(location->longitude) - 1);
     strncpy(location->lon_dir, lon_dir, sizeof(location->lon_dir) - 1);
     
-    // Ensure null termination
     location->timestamp[sizeof(location->timestamp) - 1] = '\0';
     location->latitude[sizeof(location->latitude) - 1] = '\0';
     location->lat_dir[sizeof(location->lat_dir) - 1] = '\0';
@@ -312,11 +327,9 @@ static bool _send_sms(const char* recipient, const char* message) {
     INFO("Sending SMS to %s", recipient);
     DEBUG("SMS content: %s", message);
 
-    // 1. Configure SMS text mode
     RETURN_IF(SEND_AT_CMD(AT_CMD_SMS_TEXT_MODE, MAX_SMS_RETRY_COUNT) != COMM_SUCCESS, false);
     DELAY_MS(SMS_CONFIG_DELAY_MS);
 
-    // 2. Set recipient number
     char cmd[64];
     int cmd_len = snprintf(cmd, sizeof(cmd), AT_CMD_SMS_SEND_HEADER, recipient);
     RETURN_IF(cmd_len < 0 || cmd_len >= (int)sizeof(cmd), false);
@@ -324,11 +337,9 @@ static bool _send_sms(const char* recipient, const char* message) {
     RETURN_IF(SEND_AT_CMD(cmd, MAX_SMS_RETRY_COUNT) != COMM_SUCCESS, false);
     DELAY_MS(SMS_RECIPIENT_DELAY_MS);
 
-    // 3. Send message content
     RETURN_IF(_send_at_command(message, NULL, 0, 1, 0) != COMM_SUCCESS, false);
     DELAY_MS(200);
 
-    // 4. Send end character
     RETURN_IF(_send_at_command(AT_CMD_SMS_END, _temp_buffer, sizeof(_temp_buffer), 1, 0) != COMM_SUCCESS, false);
     RETURN_IF(!_check_at_response(_temp_buffer), false);
 
@@ -340,20 +351,16 @@ static bool _send_sms(const char* recipient, const char* message) {
 static bool _send_alert_sms(const sim4g_gps_data_t *location) {
     RETURN_IF(!location || !location->valid, false);
     
-    // Validate GPS data
     RETURN_IF(!location->latitude[0] || !location->longitude[0] || 
              !location->timestamp[0] || !location->lat_dir[0] || 
              !location->lon_dir[0], false);
     
-    // Validate coordinates
     RETURN_IF(!_validate_gps_coordinate(location->latitude, location->lat_dir[0]) ||
              !_validate_gps_coordinate(location->longitude, location->lon_dir[0]), false);
 
-    // Get current phone number safely
-    char current_phone[MAX_PHONE_NUMBER_LEN + 1] = {0};
+    char current_phone[SIM4G_GPS_PHONE_MAX_LEN] = {0};
     RETURN_IF(!_get_current_phone_number(current_phone, sizeof(current_phone)), false);
 
-    // Format SMS message with buffer safety
     char sms[SMS_BUFFER_SIZE] = {0};
     RETURN_IF(!_format_alert_message(sms, sizeof(sms), location), false);
 
@@ -378,6 +385,7 @@ static void _sms_sending_task(void *param) {
             task_params->callback(false);
         }
         _cleanup_sms_task_params(task_params);
+        atomic_fetch_sub(&sms_task_count, 1);
         vTaskDelete(NULL);
         return;
     }
@@ -386,9 +394,8 @@ static void _sms_sending_task(void *param) {
     bool network_ready = false;
     bool sms_sent = false;
 
-    // Wait for network with timeout
     INFO("Waiting for network connection...");
-    while ((xTaskGetTickCount() - start_time) < pdMS_TO_TICKS(NETWORK_CHECK_TIME_MS)) {
+    while ((xTaskGetTickCount() - start_time) < pdMS_TO_TICKS(network_check_timeout_ms)) {
         if (_check_network_status()) {
             network_ready = true;
             break;
@@ -410,15 +417,15 @@ static void _sms_sending_task(void *param) {
             }
         }
     } else {
-        ERROR("Network unavailable for SMS sending after %d ms timeout", NETWORK_CHECK_TIME_MS);
+        ERROR("Network unavailable for SMS sending after %d ms timeout", network_check_timeout_ms);
     }
 
-    // Execute callback
     if (task_params->callback) {
         task_params->callback(network_ready && sms_sent);
     }
 
     _cleanup_sms_task_params(task_params);
+    atomic_fetch_sub(&sms_task_count, 1);
     DEBUG("SMS sending task completed");
     vTaskDelete(NULL);
 }
@@ -427,13 +434,17 @@ static void _sms_sending_task(void *param) {
 // Public API Implementation
 // =============================================================================
 
-void sim4g_gps_init(void) {
-    INFO("Initializing SIM4G GPS module");
+void sim4g_gps_init_with_timeout(uint32_t cold_start_ms, uint32_t normal_ms, uint32_t network_ms) {
+    INFO("Initializing SIM4G GPS module with timeouts: cold=%lu ms, normal=%lu ms, network=%lu ms",
+         cold_start_ms, normal_ms, network_ms);
     
+    gps_cold_start_timeout_ms = cold_start_ms;
+    gps_normal_timeout_ms = normal_ms;
+    network_check_timeout_ms = network_ms;
+
     RETURN_IF(!_ensure_comm_ready(), );
     RETURN_IF(!_ensure_mutex(), );
     
-    // Configure GPS autostart
     DEBUG("Configuring GPS autostart");
     SEND_AT_CMD(AT_CMD_GPS_AUTOSTART, 1);
     DELAY_MS(SMS_CONFIG_DELAY_MS);  
@@ -441,7 +452,6 @@ void sim4g_gps_init(void) {
     bool is_cold_start = atomic_load(&is_gps_cold_start);
     INFO("GPS starting in %s mode", is_cold_start ? "COLD START" : "HOT START");  
 
-    // Enable GPS
     comm_result_t res = SEND_AT_CMD(AT_CMD_GPS_ENABLE, 1);
     
     if (res == COMM_SUCCESS && _check_at_response(_temp_buffer)) {  
@@ -452,15 +462,20 @@ void sim4g_gps_init(void) {
     }
 }
 
-sim4g_error_t sim4g_gps_set_phone_number(const char *new_number) {
-    RETURN_IF(!new_number || strlen(new_number) > MAX_PHONE_NUMBER_LEN, SIM4G_ERROR_INVALID_PARAM);
+void sim4g_gps_init(void) {
+    sim4g_gps_init_with_timeout(COLD_START_TIME_MS, NORMAL_OPERATION_TIME_MS, NETWORK_CHECK_TIME_MS);
+}
+
+sim4g_error_t sim4g_gps_set_phone_number(const char *phone_number) {
+    RETURN_IF(!phone_number, SIM4G_ERROR_INVALID_PARAM);
+    RETURN_IF(!_validate_phone_number(phone_number), SIM4G_ERROR_INVALID_PARAM);
     
     if (!LOCK_MUTEX()) {
         return SIM4G_ERROR_MUTEX;
     }
     
-    strncpy(phone_number, new_number, sizeof(phone_number) - 1);
-    phone_number[sizeof(phone_number) - 1] = '\0';
+    strncpy(phone_number, phone_number, SIM4G_GPS_PHONE_MAX_LEN - 1);
+    phone_number[SIM4G_GPS_PHONE_MAX_LEN - 1] = '\0';
     UNLOCK_MUTEX();
     
     INFO("Updated SMS recipient number to: %s", phone_number);
@@ -472,7 +487,7 @@ sim4g_gps_data_t sim4g_gps_get_location(void) {
     location.valid = 0;
 
     bool is_cold_start = atomic_load(&is_gps_cold_start);
-    uint32_t gps_timeout = is_cold_start ? COLD_START_TIME_MS : NORMAL_OPERATION_TIME_MS;
+    uint32_t gps_timeout = is_cold_start ? gps_cold_start_timeout_ms : gps_normal_timeout_ms;
     uint32_t start_time = xTaskGetTickCount();
 
     INFO("Getting GPS location (timeout: %lu ms, cold_start: %s)", 
@@ -489,12 +504,13 @@ sim4g_gps_data_t sim4g_gps_get_location(void) {
                 
                 if (LOCK_MUTEX()) {
                     memcpy(&last_known_location, &location, sizeof(sim4g_gps_data_t));
+                    last_updated = xTaskGetTickCount();
                     atomic_store(&is_gps_cold_start, false);
                     UNLOCK_MUTEX();
                     
                     INFO("GPS location acquired: %.5f,%.5f at %s",
-                         _convert_dmm_to_decimal(location.latitude, location.lat_dir[0]),
-                         _convert_dmm_to_decimal(location.longitude, location.lon_dir[0]),
+                         _convert_dmm_to_decimal(location.latitude, location->lat_dir[0]),
+                         _convert_dmm_to_decimal(location->longitude, location->lon_dir[0]),
                          location.timestamp);
                 }
                 break;
@@ -505,13 +521,14 @@ sim4g_gps_data_t sim4g_gps_get_location(void) {
     }
 
     if (!location.valid) {
-        WARN("GPS timeout after %lu ms, attempting to use last known location", gps_timeout);
+        WARN("GPS timeout after %lu ms, checking last known location", gps_timeout);
         if (LOCK_MUTEX()) {
-            if (last_known_location.valid) {
+            if (last_known_location.valid && 
+                (xTaskGetTickCount() - last_updated) < pdMS_TO_TICKS(LOCATION_VALIDITY_MS)) {
                 location = last_known_location;
                 INFO("Using last known GPS location");
             } else {
-                WARN("No valid GPS location available");
+                WARN("No valid GPS location available or last known location too old");
             }
             UNLOCK_MUTEX();
         }
@@ -523,24 +540,36 @@ sim4g_gps_data_t sim4g_gps_get_location(void) {
 sim4g_error_t sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location, sms_callback_t callback) {
     RETURN_IF(!location || !location->valid, SIM4G_ERROR_INVALID_PARAM);
     
+    if (atomic_fetch_add(&sms_task_count, 1) >= MAX_SMS_TASKS) {
+        atomic_fetch_sub(&sms_task_count, 1);
+        ERROR("Maximum SMS tasks reached");
+        return SIM4G_ERROR_MEMORY;
+    }
+    
+    if (esp_get_free_heap_size() < 2048) {
+        atomic_fetch_sub(&sms_task_count, 1);
+        ERROR("Insufficient heap memory");
+        return SIM4G_ERROR_MEMORY;
+    }
+
     INFO("Initiating async fall alert SMS");
 
-    // Allocate and copy parameters for async task
     sms_task_params_t *params = pvPortMalloc(sizeof(sms_task_params_t));  
     RETURN_IF(!params, SIM4G_ERROR_MEMORY);  
 
     params->location = pvPortMalloc(sizeof(sim4g_gps_data_t));  
     if (!params->location) {  
         vPortFree(params);
+        atomic_fetch_sub(&sms_task_count, 1);
         return SIM4G_ERROR_MEMORY;  
     }  
 
     memcpy(params->location, location, sizeof(sim4g_gps_data_t));  
     params->callback = callback;
 
-    // Create async task
     if (xTaskCreate(_sms_sending_task, "sms_task", SMS_TASK_STACK_SIZE, params, SMS_TASK_PRIORITY, NULL) != pdPASS) {  
         _cleanup_sms_task_params(params);
+        atomic_fetch_sub(&sms_task_count, 1);
         return SIM4G_ERROR_MEMORY;
     }
     
