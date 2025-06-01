@@ -1,41 +1,59 @@
 /**
  * @file main.c
- * @brief Hệ thống phát hiện té ngã sử dụng ESP32, MPU6050 và module 4G-GPS EC800K.
+ * @brief Fall detection system using ESP32, MPU6050, and EC800K 4G-GPS module.
  *
- * @details Ứng dụng này phát hiện té ngã thông qua dữ liệu từ cảm biến MPU6050,
- * gửi tọa độ GPS qua SMS bằng module Quectel EC800K,
- * và phát cảnh báo cục bộ bằng còi và đèn LED.
+ * @details This application detects falls via MPU6050 sensor data,
+ * sends GPS coordinates via SMS using a Quectel EC800K module,
+ * and provides local alerts using a buzzer and LED.
+ *
+ * @author
+ *  Embedded Systems Team - Fall Alert Project
  *
  * @date
- *  Cập nhật: 2025-06-1
+ *  Created: 2025-06-01
+ *  Updated: 2025-06-01
  */
 
-// --- Hằng số cấu hình ---
-#define LED_GPIO             2                   /**< Chân GPIO dùng cho đèn LED cảnh báo */
-#define CHECK_INTERVAL_MS    1000                /**< Thời gian kiểm tra té ngã (ms) */
-#define ALERT_DURATION_MS    8000                /**< Thời gian cảnh báo sau khi té ngã (ms) */
-#define LED_BLINK_PERIOD     100                 /**< Chu kỳ nhấp nháy của LED (ms) */
-#define MAX_RETRY            3                   /**< Số lần thử tối đa khi tạo tài nguyên */
-#define MUTEX_TIMEOUT_MS     1000                /**< Thời gian chờ mutex (ms) */
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "esp_system.h"
 
-static const char *PHONE_NUMBER = "+84559865843"; /**< Số điện thoại khẩn cấp được cấu hình sẵn */
+#include "mpu6050.h"
+#include "sim4g_gps.h"
+#include "buzzer.h"
+#include "comm.h"
+#include "debugs.h"
+#include "led_indicator.h"
 
-// --- Liệt kê các sự kiện hệ thống ---
+// --- Configuration constants ---
+#define LED_GPIO             2                   /**< GPIO pin for LED indicator */
+#define CHECK_INTERVAL_MS    1000                /**< Fall detection check interval (ms) */
+#define ALERT_DURATION_MS    8000                /**< Alert duration after fall (ms) */
+#define LED_BLINK_PERIOD     100                 /**< LED blink period (ms) */
+#define MAX_RETRY            3                   /**< Max retry count for resource creation */
+#define MUTEX_TIMEOUT_MS     1000                /**< Mutex wait timeout (ms) */
+
+static const char *PHONE_NUMBER = "+84559865843"; /**< Preconfigured emergency phone number */
+
+// --- System events enumeration ---
 /**
- * @brief Các sự kiện hệ thống sử dụng trong hàng đợi sự kiện.
+ * @brief System events used in the event queue.
  */
 typedef enum {
-    FALL_DETECTED     /**< Sự kiện được kích hoạt khi phát hiện té ngã */
+    FALL_DETECTED     /**< Event triggered when a fall is detected */
 } system_event_t;
 
-// --- Các đối tượng toàn cục ---
-static QueueHandle_t xEventQueue = NULL;  /**< Hàng đợi sự kiện hệ thống */
-static SemaphoreHandle_t xMutex = NULL;   /**< Mutex để chia sẻ quyền truy cập I2C */
+// --- Global objects ---
+static QueueHandle_t xEventQueue = NULL;  /**< Queue for system events */
+static SemaphoreHandle_t xMutex = NULL;   /**< Mutex for shared I2C access */
 
 /**
- * @brief Hàm callback xử lý kết quả gửi SMS.
+ * @brief Callback function for SMS send result.
  *
- * @param success true nếu gửi SMS thành công, false nếu thất bại.
+ * @param success true if SMS was sent successfully; false otherwise.
  */
 void sms_callback(bool success) {
     if (success) {
@@ -46,15 +64,15 @@ void sms_callback(bool success) {
 }
 
 /**
- * @brief Khởi tạo các thành phần và tài nguyên hệ thống.
+ * @brief Initialize the system components and resources.
  *
- * @note Hàm này phải được gọi trước khi tạo các task.
- *       Nếu thất bại, hệ thống sẽ tự khởi động lại.
+ * @note This function must be called before any tasks are started.
+ *       Will restart the system on failure.
  */
 void system_init(void) {
     INFO("Khởi tạo hệ thống...");
 
-    // Tạo mutex với cơ chế thử lại
+    // Create mutex with retry
     for (int i = 0; i < MAX_RETRY; i++) {
         xMutex = xSemaphoreCreateMutex();
         if (xMutex) break;
@@ -66,14 +84,14 @@ void system_init(void) {
         esp_restart();
     }
 
-    // Tạo hàng đợi sự kiện
+    // Create event queue
     xEventQueue = xQueueCreate(5, sizeof(system_event_t));
     if (!xEventQueue) {
         ERROR("Tạo queue thất bại");
         esp_restart();
     }
 
-    // Khởi tạo các hệ thống con
+    // Initialize subsystems
     debugs_init();
     comm_uart_init();
     sim4g_gps_init();
@@ -102,11 +120,11 @@ void system_init(void) {
 }
 
 /**
- * @brief Task liên tục đọc dữ liệu cảm biến và phát hiện té ngã.
+ * @brief Task that continuously reads sensor data and detects falls.
  *
- * @param[in] param Không sử dụng (truyền NULL).
+ * @param[in] param Unused (pass NULL).
  *
- * @note Sử dụng mutex để truy cập an toàn cảm biến MPU6050.
+ * @note Uses mutex to access MPU6050 safely.
  */
 void fall_detection_task(void *param) {
     INFO("Task phát hiện té ngã bắt đầu");
@@ -138,9 +156,9 @@ void fall_detection_task(void *param) {
 }
 
 /**
- * @brief Task xử lý cảnh báo hệ thống (SMS, còi, LED) khi có sự kiện.
+ * @brief Task that handles system alerts (SMS, buzzer, LED) upon event.
  *
- * @param[in] param Không sử dụng (truyền NULL).
+ * @param[in] param Unused (pass NULL).
  */
 void alert_task(void *param) {
     INFO("Task xử lý cảnh báo bắt đầu");
@@ -172,9 +190,9 @@ void alert_task(void *param) {
 }
 
 /**
- * @brief Hàm main của ứng dụng. Khởi tạo hệ thống và khởi chạy các task.
+ * @brief Entry point for application. Initializes system and launches tasks.
  *
- * @note Nếu tạo task thất bại, hệ thống sẽ tự khởi động lại.
+ * @note Will restart the system if task creation fails.
  */
 void app_main(void) {
     system_init();
