@@ -161,34 +161,26 @@ void fall_detection_task(void *param) {
  * @param[in] param Unused (pass NULL).
  */
 void alert_task(void *param) {
-    INFO("Task xử lý cảnh báo bắt đầu");
-
+    INFO("MAIN", "Bắt đầu task cảnh báo");
     system_event_t event;
-
     while (1) {
-        if (xQueueReceive(xEventQueue, &event, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(xEventQueue, &event, portMAX_DELAY)) {
             if (event == FALL_DETECTED) {
-                INFO("Xử lý sự kiện té ngã...");
-
+                INFO("MAIN", "Xử lý cảnh báo té ngã...");
                 sim4g_gps_data_t location = sim4g_gps_get_location();
                 if (!location.valid) {
-                    WARN("Không lấy được vị trí GPS");
+                    WARN("MAIN", "Không thể lấy vị trí GPS");
                 }
-
                 sim4g_gps_send_fall_alert_async(&location, sms_callback);
-
                 buzzer_beep(ALERT_DURATION_MS);
                 led_indicator_start_blink(LED_BLINK_PERIOD, LED_BLINK_DOUBLE);
-
                 vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
-
-                buzzer_stop();
                 led_indicator_stop_blink();
+                buzzer_stop();
             }
         }
     }
 }
-
 /**
  * @brief Entry point for application. Initializes system and launches tasks.
  *
