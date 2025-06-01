@@ -6,12 +6,8 @@
  * gửi tọa độ GPS qua SMS bằng module Quectel EC800K,
  * và phát cảnh báo cục bộ bằng còi và đèn LED.
  *
- * @author
- *  Nhóm Embedded Systems - Dự án cảnh báo té ngã
- *
  * @date
- *  Tạo ngày: 2025-06-01
- *  Cập nhật: 2025-06-01
+ *  Cập nhật: 2025-06-1
  */
 
 // --- Hằng số cấu hình ---
