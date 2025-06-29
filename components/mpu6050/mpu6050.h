@@ -4,37 +4,50 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
-// Địa chỉ I2C và thanh ghi quan trọng của MPU6050
-#define MPU6050_ADDR         0x68
-#define MPU6050_PWR_MGMT_1   0x6B
-#define MPU6050_ACCEL_XOUT_H 0x3B
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Dữ liệu gia tốc và gyro (chuẩn hóa)
+// MPU6050 I2C address and register definitions
+#define MPU6050_ADDR          0x68
+#define MPU6050_PWR_MGMT_1    0x6B
+#define MPU6050_ACCEL_XOUT_H  0x3B
+
+/**
+ * @brief Sensor data structure for MPU6050 accelerometer and gyroscope.
+ */
 typedef struct {
-    float accel_x;  ///< Gia tốc trục X (đơn vị g)
-    float accel_y;  ///< Gia tốc trục Y (đơn vị g)
-    float accel_z;  ///< Gia tốc trục Z (đơn vị g)
-    float gyro_x;   ///< Tốc độ góc trục X (đơn vị độ/giây)
-    float gyro_y;   ///< Tốc độ góc trục Y (đơn vị độ/giây)
-    float gyro_z;   ///< Tốc độ góc trục Z (đơn vị độ/giây)
+    float accel_x;  ///< Acceleration X-axis (g)
+    float accel_y;  ///< Acceleration Y-axis (g)
+    float accel_z;  ///< Acceleration Z-axis (g)
+    float gyro_x;   ///< Angular velocity X-axis (deg/s)
+    float gyro_y;   ///< Angular velocity Y-axis (deg/s)
+    float gyro_z;   ///< Angular velocity Z-axis (deg/s)
 } sensor_data_t;
 
 /**
- * @brief Khởi tạo cảm biến MPU6050 (bỏ chế độ ngủ)
- * @return ESP_OK nếu thành công, lỗi khác nếu thất bại
+ * @brief Initialize the MPU6050 sensor (wake from sleep mode).
+ *
+ * @return ESP_OK on success, or appropriate error code on failure.
  */
 esp_err_t mpu6050_init(void);
 
 /**
- * @brief Đọc dữ liệu gia tốc và gyro từ MPU6050
- * @param[out] data Pointer đến vùng nhớ chứa dữ liệu cảm biến
- * @return ESP_OK nếu đọc thành công, lỗi khác nếu thất bại
+ * @brief Read accelerometer and gyroscope data from MPU6050.
+ *
+ * @param[out] data Pointer to struct to store the sensor readings.
+ * @return ESP_OK on success, or appropriate error code on failure.
  */
 esp_err_t mpu6050_read_data(sensor_data_t *data);
 
 /**
- * @brief Phát hiện té ngã dựa trên dữ liệu gia tốc
- * @param data Dữ liệu cảm biến đã đọc
- * @return true nếu phát hiện té ngã, false nếu không
+ * @brief Detect fall event based on acceleration deviation.
+ *
+ * @param[in] data Pointer to the last sensor readings.
+ * @return true if fall is detected, false otherwise.
  */
-bool detect_fall(sensor_data_t data);
+bool mpu6050_detect_fall(const sensor_data_t *data);
+
+#ifdef __cplusplus
+}
+#endif
