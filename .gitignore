@@ -1,0 +1,29 @@
+# ESP32 project .gitignore
+# ESP-IDF build files
+/build/
+/*.elf
+/*.bin
+/*.map
+/*.bin
+/*.log
+
+# SDK config
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.*.workspace
+
+# IDE specific
+*.code-workspace
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Shell script backups or editor tmp files
+*~
+*.swp
+*.bak
+
