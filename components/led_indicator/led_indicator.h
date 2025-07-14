@@ -1,72 +1,54 @@
-#pragma once
+/**
+ * @file led_indicator.h
+ * @brief Interface for controlling a single LED indicator with predefined blink patterns.
+ *
+ * This component allows switching LED modes (blinking, steady on/off) for alerts/status.
+ * It runs a FreeRTOS task internally to handle blink timing.
+ */
 
-#include <stdbool.h>
-#include "esp_err.h"
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @file led_indicator.h
- * @brief Giao diện điều khiển LED đa chế độ có hỗ trợ đa luồng, sử dụng trong hệ thống nhúng ESP32
- *
- * Module này cung cấp các hàm điều khiển LED (bật, tắt, nháy) một cách an toàn trong môi trường FreeRTOS.
- * Được thiết kế với tính mô-đun cao, thread-safe, phù hợp dùng trong các sản phẩm nhúng chuyên nghiệp.
- */
+#include "esp_err.h"
+#include <stdbool.h>
 
 /**
- * @brief Các chế độ nháy LED được hỗ trợ
+ * @brief LED Indicator modes.
  */
 typedef enum {
-    LED_BLINK_SINGLE = 0,   ///< Nháy 1 lần mỗi chu kỳ
-    LED_BLINK_DOUBLE,       ///< Nháy 2 lần mỗi chu kỳ
-    LED_BLINK_TRIPLE        ///< Nháy 3 lần mỗi chu kỳ
-} led_blink_mode_t;
+    LED_MODE_OFF = 0,        ///< LED off
+    LED_MODE_ON,             ///< LED steady on
+    LED_MODE_BLINK_FAST,     ///< Fast blink (e.g., alert)
+    LED_MODE_BLINK_SLOW,     ///< Slow heartbeat blink
+    LED_MODE_BLINK_ERROR     ///< Error pattern (double blink)
+} led_mode_t;
 
 /**
- * @brief Cấu hình khởi tạo cho LED indicator
- */
-typedef struct {
-    int gpio_num;           ///< Số chân GPIO điều khiển LED
-    bool active_high;       ///< true: mức HIGH bật LED; false: mức LOW bật LED
-} led_indicator_config_t;
-
-/**
- * @brief Khởi tạo hệ thống điều khiển LED
+ * @brief Initialize the LED indicator system.
  *
- * Hàm này cần được gọi một lần trước khi sử dụng các hàm điều khiển khác.
+ * This starts the internal LED control task.
  *
- * @param config Cấu hình chân GPIO và mức kích hoạt
- * @return ESP_OK nếu thành công, mã lỗi khác nếu thất bại
+ * @return ESP_OK on success.
  */
-esp_err_t led_indicator_init(const led_indicator_config_t *config);
+esp_err_t led_indicator_init(void);
 
 /**
- * @brief Bắt đầu nháy LED theo chu kỳ và chế độ định trước
+ * @brief Set the LED mode.
  *
- * Nếu đang có task nháy LED đang chạy, nó sẽ được dừng lại và khởi động lại với thông số mới.
+ * @param mode One of the predefined led_mode_t values.
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG if invalid.
+ */
+esp_err_t led_indicator_set_mode(led_mode_t mode);
+
+/**
+ * @brief Deinitialize the LED indicator task and turn LED off.
  *
- * @param delay_ms Độ dài chu kỳ nháy (ms), trong khoảng [10, 10000]
- * @param mode Chế độ nháy: đơn, đôi hoặc ba
- * @return ESP_OK nếu thành công, mã lỗi nếu thất bại (ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE,...)
+ * Optional cleanup at shutdown.
  */
-esp_err_t led_indicator_start_blink(uint32_t delay_ms, led_blink_mode_t mode);
-
-/**
- * @brief Dừng nháy LED và tắt LED
- */
-void led_indicator_stop_blink(void);
-
-/**
- * @brief Bật LED thủ công, dừng bất kỳ task nháy nào nếu đang chạy
- */
-void led_indicator_on(void);
-
-/**
- * @brief Tắt LED thủ công, dừng bất kỳ task nháy nào nếu đang chạy
- */
-void led_indicator_off(void);
+void led_indicator_deinit(void);
 
 #ifdef __cplusplus
 }

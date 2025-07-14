@@ -1,34 +1,45 @@
 /**
  * @file buzzer.h
- * @brief Giao diện driver điều khiển buzzer active trên ESP32
+ * @brief Buzzer control interface using PWM.
+ *
+ * This component provides initialization and control functions
+ * for an active buzzer via the PWM abstraction in the comm module.
  */
 
 #pragma once
-#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#include "esp_err.h"
+
 /**
- * @brief Khởi tạo buzzer
- * @return ESP_OK nếu thành công, ESP_FAIL nếu lỗi
+ * @brief Initialize the buzzer system.
+ *
+ * This must be called once before buzzer_on() or buzzer_off().
+ *
+ * @return ESP_OK on success, or an error code from comm_pwm_init().
  */
 esp_err_t buzzer_init(void);
 
 /**
- * @brief Điều khiển buzzer bật/tắt theo thời gian
- * @param duration_ms Thời gian bật (ms). >0: bật trong thời gian xác định;
- *                    0: tắt ngay; <0: bật vô hạn
- * @return ESP_OK nếu OK, ESP_FAIL nếu lỗi
+ * @brief Turn the buzzer ON.
+ *
+ * Starts PWM signal to activate the buzzer.
+ *
+ * @return ESP_OK on success, or ESP_FAIL if buzzer is not initialized.
  */
-esp_err_t buzzer_beep(int duration_ms);
+esp_err_t buzzer_on(void);
 
 /**
- * @brief Tắt buzzer ngay lập tức
- * @return ESP_OK nếu OK, ESP_FAIL nếu lỗi
+ * @brief Turn the buzzer OFF.
+ *
+ * Stops the PWM signal.
+ *
+ * @return ESP_OK on success, or ESP_FAIL if buzzer is not initialized.
  */
-esp_err_t buzzer_stop(void);
+esp_err_t buzzer_off(void);
 
 #ifdef __cplusplus
 }

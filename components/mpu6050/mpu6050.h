@@ -1,12 +1,16 @@
-#pragma once
+/**
+ * @file mpu6050.h
+ * @brief MPU6050 sensor interface
+ */
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "esp_err.h"
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include "esp_err.h"
+#include <stdbool.h>
 
 // MPU6050 I2C address and register definitions
 #define MPU6050_ADDR          0x68

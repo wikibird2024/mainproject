@@ -1,41 +1,41 @@
 /**
  * @file comm.c
- * @brief Giao tiếp phần cứng cho các module: UART (SIM 4G), I2C (MPU6050), PWM (Buzzer), GPIO (LED & Button).
+ * @brief Hardware communication driver for modules: UART (SIM 4G), I2C (MPU6050), PWM (Buzzer), GPIO (LED & Button).
  */
 
 #include "comm.h"
-#include "driver/i2c.h"
+#include "comm_log.h"
+#include "driver/i2c_master.h"
 #include "driver/ledc.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include <string.h>
 
-#define TAG "COMM"
+#define UART_NUM        UART_NUM_1
+#define UART_TX_PIN     17
+#define UART_RX_PIN     16
+#define I2C_MASTER_PORT 0
+#define I2C_MASTER_SCL  22
+#define I2C_MASTER_SDA  21
 
-// UART configuration
-#define UART_NUM      UART_NUM_1
-#define UART_TX_PIN   17
-#define UART_RX_PIN   16
-
-// I2C configuration
-#define I2C_MASTER_SCL 22
-#define I2C_MASTER_SDA 21
-
-// PWM and GPIO pins (to be initialized later)
 static int pwm_pin = -1;
 static int led_gpio = -1;
 static int button_gpio = -1;
 
-/* ============================= UART (SIM 4G GPS) ============================= */
+static bool uart_initialized = false;
+static bool i2c_initialized = false;
+static bool pwm_initialized = false;
+static bool gpio_initialized = false;
 
-/**
- * @brief Khởi tạo UART cho giao tiếp với module SIM 4G.
- */
+/* ================= UART ================= */
+
 void comm_uart_init(void) {
-    ESP_LOGI(TAG, "Initializing UART...");
+    if (uart_initialized) return;
+    uart_initialized = true;
 
-    uart_config_t uart_config = {
+    COMM_LOGI("Initializing UART...");
+
+    const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity    = UART_PARITY_DISABLE,
@@ -47,32 +47,23 @@ void comm_uart_init(void) {
     uart_param_config(UART_NUM, &uart_config);
     uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
-    ESP_LOGI(TAG, "UART initialized.");
+    COMM_LOGI("UART initialized");
 }
 
-/**
- * @brief Gửi lệnh AT qua UART và đọc phản hồi từ module SIM.
- *
- * @param command      Lệnh AT cần gửi.
- * @param response_buf Bộ đệm chứa phản hồi (nếu cần).
- * @param buf_size     Kích thước bộ đệm phản hồi.
- * @return COMM_SUCCESS nếu gửi thành công, COMM_TIMEOUT nếu không có phản hồi, COMM_INVALID_PARAM nếu tham số sai.
- */
 comm_result_t comm_uart_send_command(const char *command, char *response_buf, size_t buf_size) {
     if (!command) return COMM_INVALID_PARAM;
 
-    ESP_LOGI(TAG, "Sending command: %s", command);
+    uart_flush_input(UART_NUM);
     uart_write_bytes(UART_NUM, command, strlen(command));
     uart_write_bytes(UART_NUM, "\r\n", 2);
 
     if (response_buf && buf_size > 0) {
-        int read_bytes = uart_read_bytes(UART_NUM, (uint8_t *)response_buf, buf_size - 1, 100 / portTICK_PERIOD_MS);
+        int read_bytes = uart_read_bytes(UART_NUM, (uint8_t *)response_buf, buf_size - 1, pdMS_TO_TICKS(200));
         if (read_bytes > 0) {
             response_buf[read_bytes] = '\0';
-            ESP_LOGI(TAG, "Received response: %s", response_buf);
+            COMM_LOGI("UART response: %s", response_buf);
             return COMM_SUCCESS;
         } else {
-            ESP_LOGW(TAG, "No response received");
             response_buf[0] = '\0';
             return COMM_TIMEOUT;
         }
@@ -81,81 +72,59 @@ comm_result_t comm_uart_send_command(const char *command, char *response_buf, si
     return COMM_SUCCESS;
 }
 
-/* ============================= I2C (MPU6050) ============================= */
+/* ================= I2C ================= */
 
-/**
- * @brief Khởi tạo giao tiếp I2C master cho cảm biến MPU6050.
- */
-void comm_i2c_init(void) {
-    ESP_LOGI(TAG, "Initializing I2C...");
+esp_err_t comm_i2c_init(void) {
+    if (i2c_initialized) return ESP_OK;
+    i2c_initialized = true;
 
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
+    COMM_LOGI("Initializing I2C");
+
+    const i2c_master_bus_config_t bus_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_MASTER_PORT,
         .sda_io_num = I2C_MASTER_SDA,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_io_num = I2C_MASTER_SCL,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 100000
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true
     };
 
-    i2c_param_config(I2C_NUM_0, &conf);
-    i2c_driver_install(I2C_NUM_0, conf.mode, 0, 0, 0);
-
-    ESP_LOGI(TAG, "I2C initialized.");
+    return i2c_master_bus_init(&bus_config);
 }
 
-/**
- * @brief Ghi 1 byte dữ liệu vào thanh ghi của thiết bị I2C.
- *
- * @param device_addr Địa chỉ I2C của thiết bị.
- * @param reg_addr    Địa chỉ thanh ghi cần ghi.
- * @param data        Dữ liệu cần ghi.
- * @return esp_err_t  ESP_OK nếu thành công, lỗi nếu thất bại.
- */
-esp_err_t comm_i2c_write(uint8_t device_addr, uint8_t reg_addr, uint8_t data) {
-    uint8_t buf[2] = {reg_addr, data};
-    return i2c_master_write_to_device(I2C_NUM_0, device_addr, buf, sizeof(buf), 100 / portTICK_PERIOD_MS);
+esp_err_t comm_i2c_write(uint8_t addr, uint8_t reg, uint8_t data) {
+    uint8_t buf[2] = {reg, data};
+    return i2c_master_transmit(I2C_MASTER_PORT, addr, buf, 2, pdMS_TO_TICKS(100));
 }
 
-/**
- * @brief Đọc 1 byte dữ liệu từ thanh ghi của thiết bị I2C.
- *
- * @param device_addr Địa chỉ I2C của thiết bị.
- * @param reg_addr    Địa chỉ thanh ghi cần đọc.
- * @param data        Con trỏ để lưu dữ liệu đọc được.
- * @return esp_err_t  ESP_OK nếu thành công, lỗi nếu thất bại.
- */
-esp_err_t comm_i2c_read(uint8_t device_addr, uint8_t reg_addr, uint8_t *data) {
+esp_err_t comm_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data) {
     if (!data) return ESP_ERR_INVALID_ARG;
-    return i2c_master_write_read_device(I2C_NUM_0, device_addr, &reg_addr, 1, data, 1, 100 / portTICK_PERIOD_MS);
+    esp_err_t err = i2c_master_transmit(I2C_MASTER_PORT, addr, &reg, 1, pdMS_TO_TICKS(100));
+    if (err != ESP_OK) return err;
+    return i2c_master_receive(I2C_MASTER_PORT, addr, data, 1, pdMS_TO_TICKS(100));
 }
 
-/* ============================= PWM (Buzzer / LED) ============================= */
+/* ================= PWM ================= */
 
-/**
- * @brief Khởi tạo PWM trên chân chỉ định.
- *
- * @param pin       Chân GPIO sử dụng PWM.
- * @param frequency Tần số PWM (Hz).
- * @return esp_err_t ESP_OK nếu thành công.
- */
-esp_err_t comm_pwm_init(int pin, int frequency) {
+esp_err_t comm_pwm_init(int pin, int freq) {
     if (pin < 0) return ESP_ERR_INVALID_ARG;
+    if (pwm_initialized) return ESP_OK;
+    pwm_initialized = true;
+
     pwm_pin = pin;
+    COMM_LOGI("Initializing PWM on GPIO %d @ %dHz", pin, freq);
 
-    ESP_LOGI(TAG, "Initializing PWM on GPIO %d with %d Hz", pwm_pin, frequency);
-
-    ledc_timer_config_t timer_conf = {
+    ledc_timer_config_t timer = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
         .timer_num = LEDC_TIMER_0,
         .duty_resolution = LEDC_TIMER_10_BIT,
-        .freq_hz = frequency,
+        .freq_hz = freq,
         .clk_cfg = LEDC_AUTO_CLK
     };
-    ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
+    ESP_ERROR_CHECK(ledc_timer_config(&timer));
 
-    ledc_channel_config_t channel_conf = {
-        .gpio_num = pwm_pin,
+    ledc_channel_config_t channel = {
+        .gpio_num = pin,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
         .channel = LEDC_CHANNEL_0,
         .intr_type = LEDC_INTR_DISABLE,
@@ -163,88 +132,61 @@ esp_err_t comm_pwm_init(int pin, int frequency) {
         .duty = 0,
         .hpoint = 0
     };
-    ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
+    ESP_ERROR_CHECK(ledc_channel_config(&channel));
 
     return ESP_OK;
 }
 
-/**
- * @brief Cập nhật độ rộng xung (duty cycle) cho PWM.
- *
- * @param duty_cycle Giá trị duty (0–1023).
- * @return esp_err_t ESP_OK nếu thành công.
- */
-esp_err_t comm_pwm_set_duty_cycle(int duty_cycle) {
-    if (duty_cycle < 0 || duty_cycle > 1023) return ESP_ERR_INVALID_ARG;
-    ESP_LOGI(TAG, "Set PWM duty: %d", duty_cycle);
-
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, duty_cycle));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0));
-
-    return ESP_OK;
+esp_err_t comm_pwm_set_duty_cycle(int duty) {
+    if (duty < 0 || duty > 1023) return ESP_ERR_INVALID_ARG;
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, duty));
+    return ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
-/**
- * @brief Tắt PWM (duty = 0).
- *
- * @return esp_err_t ESP_OK nếu thành công.
- */
 esp_err_t comm_pwm_stop(void) {
-    ESP_LOGI(TAG, "Stopping PWM");
+    return comm_pwm_set_duty_cycle(0);
+}
 
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, 0));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0));
+/* ================= GPIO ================= */
 
+esp_err_t comm_gpio_init(int led, int button) {
+    if (led < 0 || button < 0) return ESP_ERR_INVALID_ARG;
+    if (gpio_initialized) return ESP_OK;
+    gpio_initialized = true;
+
+    led_gpio = led;
+    button_gpio = button;
+
+    gpio_config_t led_conf = {
+        .pin_bit_mask = 1ULL << led,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&led_conf);
+
+    gpio_config_t button_conf = {
+        .pin_bit_mask = 1ULL << button,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&button_conf);
+
+    COMM_LOGI("GPIO initialized: LED=%d, BTN=%d", led, button);
     return ESP_OK;
 }
 
-/* ============================= GPIO (LED & Button) ============================= */
-
-/**
- * @brief Khởi tạo GPIO cho LED và nút nhấn.
- *
- * @param led_pin     Chân GPIO điều khiển LED (output).
- * @param button_pin  Chân GPIO đọc nút nhấn (input, pull-up).
- * @return esp_err_t  ESP_OK nếu thành công.
- */
-esp_err_t comm_gpio_init(int led_pin, int button_pin) {
-    if (led_pin < 0 || button_pin < 0) return ESP_ERR_INVALID_ARG;
-
-    led_gpio = led_pin;
-    button_gpio = button_pin;
-
-    gpio_reset_pin(led_gpio);
-    gpio_set_direction(led_gpio, GPIO_MODE_OUTPUT);
-
-    gpio_reset_pin(button_gpio);
-    gpio_set_direction(button_gpio, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(button_gpio, GPIO_PULLUP_ONLY);
-
-    ESP_LOGI(TAG, "LED GPIO: %d, Button GPIO: %d initialized", led_gpio, button_gpio);
-    return ESP_OK;
-}
-
-/**
- * @brief Thiết lập trạng thái của LED.
- *
- * @param state 1 để bật, 0 để tắt.
- * @return esp_err_t ESP_OK nếu thành công.
- */
 esp_err_t comm_gpio_led_set(int state) {
     if (led_gpio < 0) return ESP_FAIL;
-    gpio_set_level(led_gpio, state);
-    return ESP_OK;
+    return gpio_set_level(led_gpio, state);
 }
 
-/**
- * @brief Đọc trạng thái của nút nhấn (active-low).
- *
- * @param pressed Con trỏ để lưu kết quả: true nếu được nhấn.
- * @return esp_err_t ESP_OK nếu thành công.
- */
 esp_err_t comm_gpio_button_read(bool *pressed) {
     if (!pressed || button_gpio < 0) return ESP_ERR_INVALID_ARG;
     int level = gpio_get_level(button_gpio);
-    *pressed = (level == 0); // Active low
+    *pressed = (level == 0);
     return ESP_OK;
 }

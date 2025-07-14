@@ -1,4 +1,3 @@
 idf_component_register(SRCS "led_indicator.c"
-    INCLUDE_DIRS "." 
-    REQUIRES driver)
-
+                       INCLUDE_DIRS "."
+                       REQUIRES comm debugs)

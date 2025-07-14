@@ -1,23 +1,42 @@
-menu "Debugs Configuration"
+menu "Debug and Logging System (debugs)"
 
 config DEBUGS_ENABLE_LOG
-    bool "Enable system debug log"
+    bool "Enable logging macros"
     default y
     help
-        Bật/tắt hệ thống in log từ component debugs.
+        Enable or disable all DEBUGS_LOGx macros globally.
+        Disabling this will strip all debug logging at compile-time.
 
 config DEBUGS_ENABLE_PERIODIC_LOG
-    bool "Enable periodic log output"
+    bool "Enable periodic logging task"
     default y
     depends on DEBUGS_ENABLE_LOG
     help
-        Nếu bật, hệ thống sẽ in log định kỳ mỗi khoảng thời gian nhất định.
+        Enables a FreeRTOS task that periodically prints debug/logging output.
+        Useful for monitoring system status at regular intervals.
 
 config DEBUGS_LOG_INTERVAL_MS
     int "Periodic log interval (ms)"
-    default 1000
+    default 5000
     depends on DEBUGS_ENABLE_PERIODIC_LOG
+    range 100 60000
     help
-        Khoảng thời gian giữa mỗi log định kỳ (đơn vị: mili giây).
+        Interval in milliseconds between periodic log prints.
+
+config DEBUGS_TASK_STACK_SIZE
+    int "Debug task stack size (bytes)"
+    default 2048
+    depends on DEBUGS_ENABLE_PERIODIC_LOG
+    range 512 8192
+    help
+        Stack size allocated for the periodic debug task.
+
+config DEBUGS_TASK_PRIORITY
+    int "Debug task priority"
+    default 5
+    depends on DEBUGS_ENABLE_PERIODIC_LOG
+    range 1 20
+    help
+        Task priority of the periodic debug task.
 
 endmenu
