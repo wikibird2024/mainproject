@@ -57,9 +57,9 @@ static SemaphoreHandle_t xMutex = NULL;   /**< Mutex for shared I2C access */
  */
 void sms_callback(bool success) {
     if (success) {
-        INFO("Gửi SMS thành công");
+        INFO("SMS sent successfully");
     } else {
-        ERROR("Gửi SMS thất bại");
+        ERROR("SMS sending failed");
     }
 }
 
@@ -70,24 +70,24 @@ void sms_callback(bool success) {
  *       Will restart the system on failure.
  */
 void system_init(void) {
-    INFO("Khởi tạo hệ thống...");
+    INFO("Initializing system...");
 
-    // Create mutex with retry
+    // Create mutex with retries
     for (int i = 0; i < MAX_RETRY; i++) {
         xMutex = xSemaphoreCreateMutex();
         if (xMutex) break;
-        WARN("Tạo mutex thất bại (%d/%d)", i + 1, MAX_RETRY);
+        WARN("Failed to create mutex (%d/%d)", i + 1, MAX_RETRY);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     if (!xMutex) {
-        ERROR("Không tạo được mutex sau %d lần", MAX_RETRY);
+        ERROR("Failed to create mutex after %d attempts", MAX_RETRY);
         esp_restart();
     }
 
     // Create event queue
     xEventQueue = xQueueCreate(5, sizeof(system_event_t));
     if (!xEventQueue) {
-        ERROR("Tạo queue thất bại");
+        ERROR("Failed to create event queue");
         esp_restart();
     }
 
@@ -96,13 +96,13 @@ void system_init(void) {
     comm_uart_init();
     sim4g_gps_init();
     if (sim4g_gps_set_phone_number(PHONE_NUMBER) != SIM4G_SUCCESS) {
-        ERROR("Thiết lập số điện thoại thất bại");
+        ERROR("Failed to set phone number");
         esp_restart();
     }
 
     comm_i2c_init();
     if (mpu6050_init() != ESP_OK) {
-        ERROR("Lỗi khởi tạo MPU6050");
+        ERROR("Failed to initialize MPU6050");
         esp_restart();
     }
 
@@ -112,11 +112,11 @@ void system_init(void) {
         .active_high = true
     };
     if (led_indicator_init(&led_config) != ESP_OK) {
-        ERROR("Khởi tạo LED thất bại");
+        ERROR("Failed to initialize LED");
         esp_restart();
     }
 
-    INFO("Khởi tạo hoàn tất");
+    INFO("System initialization complete");
 }
 
 /**
@@ -127,7 +127,7 @@ void system_init(void) {
  * @note Uses mutex to access MPU6050 safely.
  */
 void fall_detection_task(void *param) {
-    INFO("Task phát hiện té ngã bắt đầu");
+    INFO("Fall detection task started");
 
     while (1) {
         sensor_data_t data;
@@ -135,17 +135,17 @@ void fall_detection_task(void *param) {
         if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))) {
             if (mpu6050_read_data(&data) == ESP_OK) {
                 if (detect_fall(data)) {
-                    INFO("Té ngã: Accel=(%.2f,%.2f,%.2f), Gyro=(%.2f,%.2f,%.2f)",
+                    INFO("Fall detected: Accel=(%.2f,%.2f,%.2f), Gyro=(%.2f,%.2f,%.2f)",
                          data.accel_x, data.accel_y, data.accel_z,
                          data.gyro_x, data.gyro_y, data.gyro_z);
 
                     system_event_t event = FALL_DETECTED;
                     if (xQueueSend(xEventQueue, &event, 0) != pdTRUE) {
-                        WARN("Queue đầy, bỏ qua sự kiện té ngã");
+                        WARN("Queue full, skipping fall event");
                     }
                 }
             } else {
-                ERROR("Đọc MPU6050 thất bại");
+                ERROR("Failed to read MPU6050");
             }
 
             xSemaphoreGive(xMutex);
@@ -161,15 +161,15 @@ void fall_detection_task(void *param) {
  * @param[in] param Unused (pass NULL).
  */
 void alert_task(void *param) {
-    INFO("MAIN", "Bắt đầu task cảnh báo");
+    INFO("Starting alert task...");
     system_event_t event;
     while (1) {
         if (xQueueReceive(xEventQueue, &event, portMAX_DELAY)) {
             if (event == FALL_DETECTED) {
-                INFO("MAIN", "Xử lý cảnh báo té ngã...");
+                INFO("Processing fall alert...");
                 sim4g_gps_data_t location = sim4g_gps_get_location();
                 if (!location.valid) {
-                    WARN("MAIN", "Không thể lấy vị trí GPS");
+                    WARN("Unable to retrieve GPS location");
                 }
                 sim4g_gps_send_fall_alert_async(&location, sms_callback);
                 buzzer_beep(ALERT_DURATION_MS);
@@ -181,6 +181,7 @@ void alert_task(void *param) {
         }
     }
 }
+
 /**
  * @brief Entry point for application. Initializes system and launches tasks.
  *
@@ -193,7 +194,7 @@ void app_main(void) {
     BaseType_t alert_ok = xTaskCreate(alert_task, "alert_task", 4096, NULL, 5, NULL);
 
     if (fall_ok != pdPASS || alert_ok != pdPASS) {
-        ERROR("Tạo task thất bại");
+        ERROR("Failed to create tasks");
         vSemaphoreDelete(xMutex);
         vQueueDelete(xEventQueue);
         esp_restart();

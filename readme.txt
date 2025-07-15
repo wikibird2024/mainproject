@@ -1,93 +1,98 @@
-# Du an canh bao te nga va dinh vi GPS dung ESP32
+Here's the full English translation of your document:
 
-Du an nay su dung ESP32, cam bien MPU6050 va module Quectel EC800K 4G-GPS de phat hien su co te nga, phat am thanh canh bao va gui tin nhan SMS chua toa do GPS toi mot so dien thoai da duoc cai dat san.
+---
 
-## 📁 Cau truc du an
+# Fall Detection and GPS Location Warning System Using ESP32
+
+This project uses the ESP32, an MPU6050 sensor, and the Quectel EC800K 4G-GPS module to detect falls, trigger an audible warning, and send an SMS containing GPS coordinates to a pre-configured phone number.
+
+## 📁 Project Structure
 
 ```
 mainproject/
-├── main/                 # Vong lap chinh dieu khien he thong chua cac logic chinh va task cua chuong trinh
+├── main/                 # Main loop controlling system logic and tasks
 ├── components/
-│   ├── buzzer/           # Dieu khien buzzer va coi canh bao qua GPIO
-│   ├── comm/             # Khoi tao UART va I2C
-|   ├── led_indicator/    # Khoi dieu khien led
-│   ├── debugs/           # In thong tin debug ra serial
-│   ├── mpu6050/          # Doc du lieu tu cam bien
-│   └── sim4g_gps/        # Giao tiep AT (gps, sms..) voi module EC800K
+│   ├── buzzer/           # Controls buzzer and audible alerts via GPIO
+│   ├── comm/             # Initializes UART and I2C communication
+│   ├── led_indicator/    # Controls LED indicators
+│   ├── debugs/           # Outputs debugging information to serial
+│   ├── mpu6050/          # Reads data from the motion sensor
+│   └── sim4g_gps/        # Handles AT commands (GPS, SMS, etc.) with the EC800K module
 ```
 
-##  Tinh nang
+## Features
 
-- Phat hien te nga bang cam bien gia toc/goc
-- Kich hoat buzzer canh bao
-- kich hoat led nhay canh bao
-- Lay toa do GPS qua module 4G
-- Gui tin nhan SMS chua vi tri hien tai, neu khong lay duoc vi tri van gui tn
-- Cau truc du an chuyen nghiep, chia module ro rang
+* Detects falls using accelerometer and gyroscope data
+* Triggers a buzzer for audible alerts
+* Activates LED blinking for visual alerts
+* Retrieves GPS coordinates via 4G module
+* Sends SMS containing current location; if location is unavailable, still sends a warning
+* Professionally structured with clearly separated modules
 
-##  Phan cung can thiet
+## Required Hardware
 
-- ESP32 DevKit C
-- Cam bien MPU6050 (I2C)
-- Module 4G-GPS Quectel EC800K (UART)
-- Buzzer kich hoat GPIO
-- Cap USB UART de debug
+* ESP32 DevKit C
+* MPU6050 sensor (I2C interface)
+* Quectel EC800K 4G-GPS module (UART interface)
+* Buzzer (triggered via GPIO)
+* USB-UART cable for debugging
 
-##  Cai dat va su dung
+## Setup and Usage
 
-1. Cai [ESP-IDF v5.x](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/)
-2. Clone du an:
+1. Install [ESP-IDF v5.x](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/)
+2. Clone the project:
 
 ```bash
 git clone https://github.com/wikibird2024/mainproject
 cd mainproject
 ```
 
-3. Build va flash:
+3. Build and flash the firmware:
 
 ```bash
 idf.py fullclean
 idf.py set-target esp32
 idf.py menuconfig
-idf.py build
+idf.py buil
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-> Thay `/dev/ttyUSB0` bang cong serial cua ban
+> Replace `/dev/ttyUSB0` with your actual serial port
 
-##  Giai thich thanh phan
+## Component Explanation
 
-- **mpu6050**: Doc du lieu raw tu cam bien MPU6050 bang I2C
-- **sim4g_gps**: Giao tiep voi module EC800K de lay GPS va gui SMS
-- **buzzer**: Dieu khien am thanh canh bao
-- **led_indicator**: Dieu khien led
-- **comm**: Khoi tao UART va I2C
-- **debugs**: Ghi log thong tin ra serial
+* **mpu6050**: Reads raw accelerometer and gyroscope data from the MPU6050 via I2C
+* **sim4g\_gps**: Communicates with EC800K module to obtain GPS data and send SMS
+* **buzzer**: Controls the audible alert system
+* **led\_indicator**: Manages the LED indicators
+* **comm**: Initializes and configures UART and I2C buses
+* **debugs**: Logs system information to the serial monitor
 
-##  Nguyen ly phat hien te nga
+## Fall Detection Algorithm
 
-1. Doc gia toc va toc do goc moi 200ms
-2. Ap dung giai thuat nguong de phan tich te nga
-3. Neu phat hien te nga:
-   - Kich hoat buzzer
-   - Lay toa do GPS
-   - Gui tin nhan SMS
+1. Reads accelerometer and gyroscope data every 200ms
+2. Applies a threshold-based algorithm to detect a fall
+3. Upon detection:
 
-##  Vi du SMS
+   * Triggers the buzzer
+   * Retrieves GPS coordinates
+   * Sends an SMS message
+
+## SMS Example
 
 ```
-CANH BAO: Te nga!
-Vi tri: https://maps.google.com/?q=10.823456,106.629654
-Thoi gian: 2023-12-15 14:30:45
+WARNING: Fall detected!
+Location: https://maps.google.com/?q=10.823456,106.629654
+Time: 2023-12-15 14:30:45
 ```
 
-##  Dinh huong mo rong
+## Future Enhancements
 
-- Cai tien thuat toan bang machine learning
-- Cho phep thay doi so dien thoai qua giao dien hoac NVS
-- Them chuc nang gui du lieu qua HTTP
+* Improve algorithm using machine learning techniques
+* Allow phone number configuration via GUI or NVS
+* Add HTTP data transmission capability
 
-##  Giay phep
+## License
+
 Original author: Tran Hao
-Du an duoc cap phep theo MIT License (Massachusetts Institute of Technology – MIT).
-
+This project is licensed under the MIT License (Massachusetts Institute of Technology – MIT).
