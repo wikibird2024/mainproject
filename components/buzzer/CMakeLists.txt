@@ -1,3 +1,3 @@
 idf_component_register(SRCS "buzzer.c"
                        INCLUDE_DIRS "."
-                       REQUIRES comm debugs)
+                       REQUIRES driver debugs comm)
