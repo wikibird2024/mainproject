@@ -1,0 +1,29 @@
+menu "Wi-Fi Configuration"
+
+    config WIFI_SSID
+        string "Wi-Fi SSID"
+        default "ESP32_WIFI"
+        help
+            Network name (SSID) to connect to
+
+    config WIFI_PASSWORD
+        string "Wi-Fi Password"
+        default "esp32pass"
+        help
+            Password for the Wi-Fi network (min 8 characters)
+
+    config WIFI_MAX_RETRY
+        int "Maximum connection retries"
+        default 5
+        range 1 10
+        help
+            Number of times to retry connecting (1-10)
+
+    config WIFI_TIMEOUT_MS
+        int "Connection timeout (milliseconds)"
+        default 10000
+        range 1000 30000
+        help
+            Maximum time to wait for connection (1000-30000ms)
+
+endmenu

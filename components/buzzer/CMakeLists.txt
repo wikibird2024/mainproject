@@ -1,3 +1,6 @@
-idf_component_register(SRCS "buzzer.c"
-                       INCLUDE_DIRS "."
-                       REQUIRES driver debugs comm)
+idf_component_register(
+    SRCS "src/buzzer.c"
+    INCLUDE_DIRS "include"
+    PRIV_REQUIRES debugs comm log freertos driver
+)
+

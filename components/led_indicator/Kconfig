@@ -1,0 +1,36 @@
+
+menu "LED Indicator Configuration"
+
+config LED_INDICATOR_ENABLE
+    bool "Enable LED Indicator"
+    default y
+
+config LED_INDICATOR_GPIO
+    int "GPIO number for LED"
+    depends on LED_INDICATOR_ENABLE
+    default 2
+    help
+        GPIO number where the LED is connected.
+
+config LED_INDICATOR_ACTIVE_HIGH
+    bool "LED is active high?"
+    depends on LED_INDICATOR_ENABLE
+    default y
+    help
+        If set, a logic high level will turn the LED on.
+
+config LED_INDICATOR_TASK_STACK_SIZE
+    int "LED task stack size"
+    depends on LED_INDICATOR_ENABLE
+    default 2048
+    help
+        Stack size allocated for the LED control task.
+
+config LED_INDICATOR_TASK_PRIORITY
+    int "LED task priority"
+    depends on LED_INDICATOR_ENABLE
+    default 5
+    help
+        Priority assigned to the LED control task.
+
+endmenu

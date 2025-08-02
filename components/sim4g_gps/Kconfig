@@ -1,0 +1,14 @@
+
+menu "SIM4G-GPS Settings"
+
+config SIM4G_ENABLED
+    bool "Enable SIM4G-GPS"
+    default y
+
+
+config SIM4G_DEFAULT_PHONE
+    string "Default phone number to send alerts"
+    default "+84999999999"
+    help
+        This phone number will be used for fallback SMS alerts if none is provided.
+endmenu

@@ -1,0 +1,23 @@
+
+menu "Buzzer Configuration"
+
+config BUZZER_ENABLE
+    bool "Enable Buzzer"
+    default y
+
+config BUZZER_GPIO
+    int "GPIO pin for buzzer"
+    depends on BUZZER_ENABLE
+    default 13
+
+config BUZZER_FREQ
+    int "Buzzer frequency (Hz)"
+    depends on BUZZER_ENABLE
+    default 2000
+
+config BUZZER_DUTY
+    int "LEDC duty (0-8191)"
+    depends on BUZZER_ENABLE
+    default 4095
+
+endmenu

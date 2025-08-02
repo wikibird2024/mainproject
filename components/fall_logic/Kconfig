@@ -1,0 +1,38 @@
+
+menu "Fall Logic Configuration"
+
+config FALL_LOGIC_ENABLE
+    bool "Enable fall detection logic"
+    default y
+    help
+        Enable or disable the fall detection module.
+
+config FALL_LOGIC_THRESHOLD_MG
+    int "Fall detection acceleration threshold (mg)"
+    default 500
+    depends on FALL_LOGIC_ENABLE
+    help
+        Threshold in milli-g (mg) to consider a fall. E.g., 0.5g = 500mg.
+
+config FALL_LOGIC_CHECK_INTERVAL_MS
+    int "Fall check interval (ms)"
+    default 1000
+    depends on FALL_LOGIC_ENABLE
+    help
+        Delay in milliseconds between sensor checks.
+
+config FALL_LOGIC_TASK_STACK_SIZE
+    int "Fall logic task stack size"
+    default 4096
+    depends on FALL_LOGIC_ENABLE
+    help
+        Stack size for the FreeRTOS fall detection task.
+
+config FALL_LOGIC_TASK_PRIORITY
+    int "Fall logic task priority"
+    default 5
+    depends on FALL_LOGIC_ENABLE
+    help
+        Priority of the fall detection FreeRTOS task.
+
+endmenu
