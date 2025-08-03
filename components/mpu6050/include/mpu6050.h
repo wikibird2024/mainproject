@@ -45,6 +45,11 @@ typedef struct {
 esp_err_t mpu6050_init(void);
 
 /**
+ * @brief Put MPU6050 into low-power sleep mode.
+ */
+esp_err_t mpu6050_deinit(void);
+
+/**
  * @brief Read all accelerometer and gyroscope data from MPU6050.
  *
  * Reads 14 consecutive bytes from MPU6050 starting at ACCEL_XOUT_H.
@@ -56,18 +61,6 @@ esp_err_t mpu6050_init(void);
  *      - ESP_FAIL on communication error
  */
 esp_err_t mpu6050_read_data(sensor_data_t *data);
-
-/**
- * @brief Detect a fall event using simple threshold-based acceleration
- * deviation.
- *
- * The detection method is primitive. For production, consider using machine
- * learning or multi-axis integration methods with filtering.
- *
- * @param[in] data Pointer to recent sensor reading
- * @return true if fall is detected, false otherwise
- */
-bool mpu6050_detect_fall(const sensor_data_t *data);
 
 #ifdef __cplusplus
 }

@@ -15,7 +15,8 @@
 #include "mpu6050.h"
 #include "sdkconfig.h"
 
-#define FALL_THRESHOLD CONFIG_FALL_LOGIC_THRESHOLD_MG
+// #define FALL_THRESHOLD CONFIG_FALL_LOGIC_THRESHOLD_G
+#define FALL_THRESHOLD ((float)CONFIG_FALL_LOGIC_THRESHOLD_G / 1000.0f)
 #define CHECK_INTERVAL_MS CONFIG_FALL_LOGIC_CHECK_INTERVAL_MS
 #define FALL_TASK_STACK_SIZE CONFIG_FALL_LOGIC_TASK_STACK_SIZE
 #define FALL_TASK_PRIORITY CONFIG_FALL_LOGIC_TASK_PRIORITY
@@ -51,7 +52,7 @@ static void fall_task(void *param) {
               sqrtf(data.accel_x * data.accel_x + data.accel_y * data.accel_y +
                     data.accel_z * data.accel_z);
 
-          DEBUGS_LOGI("Fall detected: Accel=(%.2f, %.2f, %.2f), Gyro=(%.2f, "
+          DEBUGS_LOGI("Fall contidion: Accel=(%.2f, %.2f, %.2f), Gyro=(%.2f, "
                       "%.2f, %.2f)",
                       data.accel_x, data.accel_y, data.accel_z, data.gyro_x,
                       data.gyro_y, data.gyro_z);

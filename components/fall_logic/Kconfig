@@ -1,38 +1,49 @@
 
-menu "Fall Logic Configuration"
+menu "Fall Detection Logic Configuration"
 
 config FALL_LOGIC_ENABLE
     bool "Enable fall detection logic"
     default y
     help
-        Enable or disable the fall detection module.
+        Enable or disable the fall detection functionality.
+        When enabled, the system will periodically analyze
+        accelerometer data to detect possible falls.
 
-config FALL_LOGIC_THRESHOLD_MG
-    int "Fall detection acceleration threshold (mg)"
-    default 500
+config FALL_LOGIC_THRESHOLD_G
+    int "Fall detection threshold (mg)"
+    default 400
+    range 100 800
     depends on FALL_LOGIC_ENABLE
     help
-        Threshold in milli-g (mg) to consider a fall. E.g., 0.5g = 500mg.
+        The acceleration threshold in milli-g (mg) used to
+        identify a fall event. A value of 400mg (0.4g) is a
+        good default. During freefall, total acceleration drops
+        significantly, typically near 0g.
 
 config FALL_LOGIC_CHECK_INTERVAL_MS
-    int "Fall check interval (ms)"
-    default 1000
+    int "Sensor polling interval (ms)"
+    default 150
+    range 50 500
     depends on FALL_LOGIC_ENABLE
     help
-        Delay in milliseconds between sensor checks.
+        The interval in milliseconds between sensor checks.
+        Shorter intervals increase responsiveness but use more CPU.
+        Default is 150ms for a good balance.
 
 config FALL_LOGIC_TASK_STACK_SIZE
-    int "Fall logic task stack size"
+    int "Fall logic task stack size (bytes)"
     default 4096
     depends on FALL_LOGIC_ENABLE
     help
-        Stack size for the FreeRTOS fall detection task.
+        Stack size for the FreeRTOS task responsible for
+        processing fall detection logic.
 
 config FALL_LOGIC_TASK_PRIORITY
     int "Fall logic task priority"
     default 5
     depends on FALL_LOGIC_ENABLE
     help
-        Priority of the fall detection FreeRTOS task.
+        Priority of the FreeRTOS task handling fall detection.
+        Higher values increase task precedence over others.
 
 endmenu
