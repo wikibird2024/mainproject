@@ -3,7 +3,6 @@ idf_component_register(
     SRCS 
         "main.c"
         "app_main.c"
-        "event_handler.c"
     INCLUDE_DIRS "."
     REQUIRES mqtt
     PRIV_REQUIRES 
@@ -15,6 +14,7 @@ idf_component_register(
         sim4g_gps 
         fall_logic 
         wifi_connect
+        event_handler
 )
 
 # Đăng ký file Kconfig nếu cần tùy chỉnh

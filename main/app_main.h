@@ -1,33 +1,99 @@
+#ifndef APP_MAIN_H_
+#define APP_MAIN_H_
 
-/**
- * @file app_main.h
- * @brief Public interface for system orchestration and application startup.
- */
-
-#pragma once
-
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
- * @brief Initialize the entire system (drivers, peripherals, services).
+ * @brief System status structure
  */
-void app_system_init(void);
+typedef struct {
+  bool system_initialized;        ///< True if system is initialized
+  bool application_running;       ///< True if application is running
+  bool mutex_available;           ///< True if mutex is created
+  bool event_queue_available;     ///< True if event queue is created
+  bool event_handler_initialized; ///< True if event handler is initialized
+} app_system_status_t;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Application Functions
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * @brief Start main application logic (tasks, state machines, etc).
+ * @brief Initialize the entire system
+ * @return ESP_OK on success, ESP_FAIL on failure
  */
-void app_start_application(void);
+esp_err_t app_system_init(void);
 
 /**
- * @brief Get handle to shared system mutex.
- * @return SemaphoreHandle_t
+ * @brief Start the application tasks
+ * @return ESP_OK on success, ESP_FAIL on failure, ESP_ERR_INVALID_STATE if
+ * system not initialized
+ */
+esp_err_t app_start_application(void);
+
+/**
+ * @brief Stop the application
+ * @return ESP_OK on success
+ */
+esp_err_t app_stop_application(void);
+
+/**
+ * @brief Restart the entire system
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t app_restart_system(void);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status and Information Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @brief Check if system is initialized
+ * @return true if initialized, false otherwise
+ */
+bool app_is_system_initialized(void);
+
+/**
+ * @brief Check if application is running
+ * @return true if running, false otherwise
+ */
+bool app_is_application_running(void);
+
+/**
+ * @brief Get system status information
+ * @param status Pointer to status structure to fill
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG if status is NULL
+ */
+esp_err_t app_get_system_status(app_system_status_t *status);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy Getter Functions (for backward compatibility)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @brief Get mutex handle (legacy function)
+ * @deprecated Use proper initialization flow instead
+ * @return Mutex handle or NULL if not initialized
  */
 SemaphoreHandle_t get_mutex(void);
 
 /**
- * @brief Get handle to event queue for fall detection.
- * @return QueueHandle_t
+ * @brief Get event queue handle (legacy function)
+ * @deprecated Use proper initialization flow instead
+ * @return Queue handle or NULL if not initialized
  */
 QueueHandle_t get_event_queue(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // APP_MAIN_H_

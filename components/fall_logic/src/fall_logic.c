@@ -95,19 +95,31 @@ esp_err_t fall_logic_init(SemaphoreHandle_t mutex, QueueHandle_t event_queue) {
   return ESP_OK;
 }
 
-void fall_logic_start(void) {
-  xTaskCreate(fall_task, "fall_task", FALL_TASK_STACK_SIZE, NULL,
-              FALL_TASK_PRIORITY, NULL);
+// Fix return esp_err_t
+esp_err_t fall_logic_start(void) {
+  BaseType_t result = xTaskCreate(fall_task, "fall_task", FALL_TASK_STACK_SIZE,
+                                  NULL, FALL_TASK_PRIORITY, NULL);
+
+  if (result != pdPASS) {
+    DEBUGS_LOGE("Failed to create fall_task");
+    return ESP_FAIL;
+  }
+
+  DEBUGS_LOGI("Fall logic task created successfully");
+  return ESP_OK;
 }
 
-void fall_logic_enable(void) {
+esp_err_t fall_logic_enable(void) {
   s_fall_logic_enabled = true;
   DEBUGS_LOGI("Fall logic enabled");
+  return ESP_OK;
 }
 
-void fall_logic_disable(void) {
+esp_err_t fall_logic_disable(void) {
   s_fall_logic_enabled = false;
   DEBUGS_LOGI("Fall logic disabled");
+  return ESP_OK;
 }
 
+//------------------------------------
 bool fall_logic_is_enabled(void) { return s_fall_logic_enabled; }

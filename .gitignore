@@ -6,7 +6,7 @@
 /*.map
 /*.bin
 /*.log
-
+/main/build/
 # SDK config
 /sdkconfig
 /sdkconfig.old

@@ -1,13 +1,10 @@
-
 #pragma once
-
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,22 +49,32 @@ esp_err_t fall_logic_init(SemaphoreHandle_t mutex, QueueHandle_t event_queue);
  *
  * This function launches the FreeRTOS task that reads sensor data and
  * performs fall detection continuously.
+ *
+ * @return
+ *      - ESP_OK on success
+ *      - ESP_FAIL if task creation fails
  */
-void fall_logic_start(void);
+esp_err_t fall_logic_start(void);
 
 /**
  * @brief Enable fall detection logic at runtime.
  *
  * This allows enabling fall detection dynamically after boot.
+ *
+ * @return
+ *      - ESP_OK on success
  */
-void fall_logic_enable(void);
+esp_err_t fall_logic_enable(void);
 
 /**
  * @brief Disable fall detection logic at runtime.
  *
  * Use this to pause or stop the fall detection task temporarily.
+ *
+ * @return
+ *      - ESP_OK on success
  */
-void fall_logic_disable(void);
+esp_err_t fall_logic_disable(void);
 
 /**
  * @brief Check if fall detection logic is currently active.
@@ -80,9 +87,9 @@ bool fall_logic_is_enabled(void);
 
 // Fallback macros if fall logic is not enabled in Kconfig
 #define fall_logic_init(mutex, queue) (ESP_OK)
-#define fall_logic_start() ((void)0)
-#define fall_logic_enable() ((void)0)
-#define fall_logic_disable() ((void)0)
+#define fall_logic_start() (ESP_OK)
+#define fall_logic_enable() (ESP_OK)
+#define fall_logic_disable() (ESP_OK)
 #define fall_logic_is_enabled() (false)
 
 #endif // CONFIG_FALL_LOGIC_ENABLE

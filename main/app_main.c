@@ -6,9 +6,7 @@
  * Initializes system components and synchronization primitives, and starts
  * application-level tasks.
  */
-
 #include "app_main.h"
-
 #include "buzzer.h"
 #include "comm.h"
 #include "debugs.h"
@@ -18,11 +16,11 @@
 #include "led_indicator.h"
 #include "sdkconfig.h"
 #include "sim4g_gps.h"
+#include "wifi_connect.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration Macros
 // ─────────────────────────────────────────────────────────────────────────────
-
 #define APP_MAX_INIT_RETRY 3
 #define APP_EVENT_QUEUE_LENGTH 10
 #define APP_EVENT_ITEM_SIZE sizeof(fall_event_t)
@@ -30,9 +28,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Static Shared Resources
 // ─────────────────────────────────────────────────────────────────────────────
-
 static SemaphoreHandle_t xMutex = NULL;
 static QueueHandle_t xEventQueue = NULL;
+static bool system_initialized = false;
+static bool application_started = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Local Functions
@@ -40,68 +39,270 @@ static QueueHandle_t xEventQueue = NULL;
 
 /**
  * @brief Initialize synchronization primitives (mutex and event queue).
+ * @return ESP_OK on success, ESP_FAIL on failure
  */
-static void init_sync_primitives(void) {
+static esp_err_t init_sync_primitives(void) {
+  // Create mutex with retry logic
   for (int i = 0; i < APP_MAX_INIT_RETRY; ++i) {
     xMutex = xSemaphoreCreateMutex();
-    if (xMutex != NULL)
+    if (xMutex != NULL) {
       break;
+    }
+    DEBUGS_LOGW("Mutex creation failed, retry %d/%d", i + 1,
+                APP_MAX_INIT_RETRY);
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 
   if (xMutex == NULL) {
-    DEBUGS_LOGE("Mutex creation failed. Restarting...");
-    esp_restart();
+    DEBUGS_LOGE("Mutex creation failed after %d retries", APP_MAX_INIT_RETRY);
+    return ESP_FAIL;
   }
 
+  // Create event queue
   xEventQueue = xQueueCreate(APP_EVENT_QUEUE_LENGTH, APP_EVENT_ITEM_SIZE);
   if (xEventQueue == NULL) {
-    DEBUGS_LOGE("Event queue creation failed. Restarting...");
-    esp_restart();
+    DEBUGS_LOGE("Event queue creation failed");
+    // Cleanup mutex if queue creation failed
+    vSemaphoreDelete(xMutex);
+    xMutex = NULL;
+    return ESP_FAIL;
   }
+
+  DEBUGS_LOGI("Synchronization primitives initialized successfully");
+  return ESP_OK;
 }
 
 /**
  * @brief Initialize all system components and drivers.
+ * @return ESP_OK on success, ESP_FAIL on failure
  */
-static void init_components(void) {
+static esp_err_t init_components(void) {
+  esp_err_t ret = ESP_OK;
+
   // Logging system
   debugs_init();
+  DEBUGS_LOGI("Debug system initialized");
 
-  // Synchronization
-  init_sync_primitives();
+  // Synchronization primitives
+  ret = init_sync_primitives();
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("Failed to initialize synchronization primitives");
+    return ret;
+  }
 
   // Communication interfaces
-  comm_init_all(); // Unified UART/I2C init (you can implement this)
+  comm_init_all(); // Unified UART/I2C init
+  DEBUGS_LOGI("Communication interfaces initialized");
 
   // Peripherals
   buzzer_init();
+  DEBUGS_LOGI("Buzzer initialized");
+
   led_indicator_init();
+  DEBUGS_LOGI("LED indicator initialized");
 
   // SIM module
   sim4g_gps_init();
   sim4g_gps_set_phone_number(CONFIG_SIM4G_DEFAULT_PHONE);
+  DEBUGS_LOGI("SIM4G GPS initialized with phone: %s",
+              CONFIG_SIM4G_DEFAULT_PHONE);
 
   // Fall logic module
   fall_logic_init(xMutex, xEventQueue);
+  DEBUGS_LOGI("Fall logic initialized");
 
-  DEBUGS_LOGI("System initialization complete.");
+  return ESP_OK;
+}
+
+/**
+ * @brief Cleanup all system resources
+ */
+static void cleanup_system(void) {
+  // Stop application components
+  if (application_started) {
+    event_handler_deinit();
+    // Add fall_logic_stop() if available
+    application_started = false;
+  }
+
+  // Cleanup sync primitives
+  if (xMutex != NULL) {
+    vSemaphoreDelete(xMutex);
+    xMutex = NULL;
+  }
+
+  if (xEventQueue != NULL) {
+    vQueueDelete(xEventQueue);
+    xEventQueue = NULL;
+  }
+
+  system_initialized = false;
+  DEBUGS_LOGI("System cleanup completed");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-void app_system_init(void) {
+/**
+ * @brief Initialize the entire system
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t app_system_init(void) {
+  if (system_initialized) {
+    DEBUGS_LOGW("System already initialized");
+    return ESP_OK;
+  }
+
   DEBUGS_LOGI("System initialization started...");
-  init_components();
+
+  esp_err_t ret = init_components();
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("Component initialization failed");
+    cleanup_system();
+    return ret;
+  }
+
+  system_initialized = true;
+  DEBUGS_LOGI("System initialization complete.");
+  return ESP_OK;
 }
 
-void app_start_application(void) {
-  fall_logic_start();
-  event_handler_start();
+/**
+ * @brief Start the application tasks
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t app_start_application(void) {
+  if (!system_initialized) {
+    DEBUGS_LOGE("System not initialized. Call app_system_init() first.");
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  if (application_started) {
+    DEBUGS_LOGW("Application already started");
+    return ESP_OK;
+  }
+
+  // Validate required resources
+  if (xEventQueue == NULL) {
+    DEBUGS_LOGE("Event queue not available");
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  // Start fall logic
+  esp_err_t ret = fall_logic_start();
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("Failed to start fall logic");
+    return ret;
+  }
+
+  // Initialize event handler with the queue
+  ret = event_handler_init(xEventQueue);
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("Failed to initialize event handler: %s", esp_err_to_name(ret));
+    return ret;
+  }
+
+  application_started = true;
+  DEBUGS_LOGI("Application started successfully");
+  return ESP_OK;
 }
 
+/**
+ * @brief Stop the application
+ * @return ESP_OK on success
+ */
+esp_err_t app_stop_application(void) {
+  if (!application_started) {
+    DEBUGS_LOGW("Application not started");
+    return ESP_OK;
+  }
+
+  // Stop event handler
+  event_handler_deinit();
+
+  // Stop fall logic (if stop function exists)
+  // fall_logic_stop();
+
+  application_started = false;
+  DEBUGS_LOGI("Application stopped");
+  return ESP_OK;
+}
+
+/**
+ * @brief Restart the entire system
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t app_restart_system(void) {
+  DEBUGS_LOGI("Restarting system...");
+
+  // Stop application
+  app_stop_application();
+
+  // Cleanup system
+  cleanup_system();
+
+  // Reinitialize
+  esp_err_t ret = app_system_init();
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("System restart failed");
+    return ret;
+  }
+
+  // Restart application
+  ret = app_start_application();
+  if (ret != ESP_OK) {
+    DEBUGS_LOGE("Application restart failed");
+    return ret;
+  }
+
+  DEBUGS_LOGI("System restart completed successfully");
+  return ESP_OK;
+}
+
+/**
+ * @brief Check if system is initialized
+ * @return true if initialized, false otherwise
+ */
+bool app_is_system_initialized(void) { return system_initialized; }
+
+/**
+ * @brief Check if application is running
+ * @return true if running, false otherwise
+ */
+bool app_is_application_running(void) { return application_started; }
+
+/**
+ * @brief Get system status information
+ * @param status Pointer to status structure to fill
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG if status is NULL
+ */
+esp_err_t app_get_system_status(app_system_status_t *status) {
+  if (status == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  status->system_initialized = system_initialized;
+  status->application_running = application_started;
+  status->mutex_available = (xMutex != NULL);
+  status->event_queue_available = (xEventQueue != NULL);
+  status->event_handler_initialized = event_handler_is_initialized();
+
+  return ESP_OK;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy Getter Functions (for backward compatibility)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @brief Get mutex handle (legacy function)
+ * @return Mutex handle or NULL if not initialized
+ */
 SemaphoreHandle_t get_mutex(void) { return xMutex; }
 
+/**
+ * @brief Get event queue handle (legacy function)
+ * @return Queue handle or NULL if not initialized
+ */
 QueueHandle_t get_event_queue(void) { return xEventQueue; }
