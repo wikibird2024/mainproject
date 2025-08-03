@@ -24,6 +24,18 @@ menu "Wi-Fi Configuration"
         default 10000
         range 1000 30000
         help
-            Maximum time to wait for connection (1000-30000ms)
+        Used for generic operations like scanning, waiting, etc.
+
+    config WIFI_CONNECT_TIMEOUT_MS
+        int "Wi-Fi connect default timeout (ms)"
+        default 30000
+        help
+            Used as default connection timeout in code (e.g. retry loop).
+
+    config WIFI_AUTO_RECONNECT
+        bool "Enable auto reconnect"
+        default y
+        help
+            Automatically try to reconnect on disconnect.
 
 endmenu

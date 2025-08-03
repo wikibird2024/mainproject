@@ -15,11 +15,13 @@ extern "C" {
  * @brief System status structure
  */
 typedef struct {
-  bool system_initialized;        ///< True if system is initialized
-  bool application_running;       ///< True if application is running
-  bool mutex_available;           ///< True if mutex is created
-  bool event_queue_available;     ///< True if event queue is created
-  bool event_handler_initialized; ///< True if event handler is initialized
+  bool system_initialized;
+  bool application_running;
+  bool mutex_available;
+  bool event_queue_available;
+  bool event_handler_initialized;
+  bool wifi_initialized; // Track wifi status
+  bool wifi_connected;
 } app_system_status_t;
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -62,7 +62,6 @@ static esp_err_t init_sync_primitives(void) {
   xEventQueue = xQueueCreate(APP_EVENT_QUEUE_LENGTH, APP_EVENT_ITEM_SIZE);
   if (xEventQueue == NULL) {
     DEBUGS_LOGE("Event queue creation failed");
-    // Cleanup mutex if queue creation failed
     vSemaphoreDelete(xMutex);
     xMutex = NULL;
     return ESP_FAIL;
@@ -91,8 +90,17 @@ static esp_err_t init_components(void) {
   }
 
   // Communication interfaces
-  comm_init_all(); // Unified UART/I2C init
+  comm_init_all();
   DEBUGS_LOGI("Communication interfaces initialized");
+
+  // WiFi connection - Simple call, all complexity handled in wifi_connect
+  // module
+  ret = wifi_connect_sta(0); // Use default timeout from Kconfig
+  if (ret == ESP_OK) {
+    DEBUGS_LOGI("WiFi connected successfully");
+  } else {
+    DEBUGS_LOGW("WiFi connection failed, continuing without WiFi");
+  }
 
   // Peripherals
   buzzer_init();
@@ -121,9 +129,11 @@ static void cleanup_system(void) {
   // Stop application components
   if (application_started) {
     event_handler_deinit();
-    // Add fall_logic_stop() if available
     application_started = false;
   }
+
+  // Simple WiFi cleanup
+  wifi_connect_deinit();
 
   // Cleanup sync primitives
   if (xMutex != NULL) {
@@ -144,10 +154,6 @@ static void cleanup_system(void) {
 // Public Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @brief Initialize the entire system
- * @return ESP_OK on success, ESP_FAIL on failure
- */
 esp_err_t app_system_init(void) {
   if (system_initialized) {
     DEBUGS_LOGW("System already initialized");
@@ -168,10 +174,6 @@ esp_err_t app_system_init(void) {
   return ESP_OK;
 }
 
-/**
- * @brief Start the application tasks
- * @return ESP_OK on success, ESP_FAIL on failure
- */
 esp_err_t app_start_application(void) {
   if (!system_initialized) {
     DEBUGS_LOGE("System not initialized. Call app_system_init() first.");
@@ -183,20 +185,17 @@ esp_err_t app_start_application(void) {
     return ESP_OK;
   }
 
-  // Validate required resources
   if (xEventQueue == NULL) {
     DEBUGS_LOGE("Event queue not available");
     return ESP_ERR_INVALID_STATE;
   }
 
-  // Start fall logic
   esp_err_t ret = fall_logic_start();
   if (ret != ESP_OK) {
     DEBUGS_LOGE("Failed to start fall logic");
     return ret;
   }
 
-  // Initialize event handler with the queue
   ret = event_handler_init(xEventQueue);
   if (ret != ESP_OK) {
     DEBUGS_LOGE("Failed to initialize event handler: %s", esp_err_to_name(ret));
@@ -208,48 +207,30 @@ esp_err_t app_start_application(void) {
   return ESP_OK;
 }
 
-/**
- * @brief Stop the application
- * @return ESP_OK on success
- */
 esp_err_t app_stop_application(void) {
   if (!application_started) {
     DEBUGS_LOGW("Application not started");
     return ESP_OK;
   }
 
-  // Stop event handler
   event_handler_deinit();
-
-  // Stop fall logic (if stop function exists)
-  // fall_logic_stop();
-
   application_started = false;
   DEBUGS_LOGI("Application stopped");
   return ESP_OK;
 }
 
-/**
- * @brief Restart the entire system
- * @return ESP_OK on success, ESP_FAIL on failure
- */
 esp_err_t app_restart_system(void) {
   DEBUGS_LOGI("Restarting system...");
 
-  // Stop application
   app_stop_application();
-
-  // Cleanup system
   cleanup_system();
 
-  // Reinitialize
   esp_err_t ret = app_system_init();
   if (ret != ESP_OK) {
     DEBUGS_LOGE("System restart failed");
     return ret;
   }
 
-  // Restart application
   ret = app_start_application();
   if (ret != ESP_OK) {
     DEBUGS_LOGE("Application restart failed");
@@ -260,23 +241,13 @@ esp_err_t app_restart_system(void) {
   return ESP_OK;
 }
 
-/**
- * @brief Check if system is initialized
- * @return true if initialized, false otherwise
- */
 bool app_is_system_initialized(void) { return system_initialized; }
 
-/**
- * @brief Check if application is running
- * @return true if running, false otherwise
- */
 bool app_is_application_running(void) { return application_started; }
 
-/**
- * @brief Get system status information
- * @param status Pointer to status structure to fill
- * @return ESP_OK on success, ESP_ERR_INVALID_ARG if status is NULL
- */
+// Simple WiFi status check - delegate to WiFi module
+bool app_is_wifi_connected(void) { return wifi_is_connected(); }
+
 esp_err_t app_get_system_status(app_system_status_t *status) {
   if (status == NULL) {
     return ESP_ERR_INVALID_ARG;
@@ -291,18 +262,7 @@ esp_err_t app_get_system_status(app_system_status_t *status) {
   return ESP_OK;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Legacy Getter Functions (for backward compatibility)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * @brief Get mutex handle (legacy function)
- * @return Mutex handle or NULL if not initialized
- */
+// Legacy functions
 SemaphoreHandle_t get_mutex(void) { return xMutex; }
 
-/**
- * @brief Get event queue handle (legacy function)
- * @return Queue handle or NULL if not initialized
- */
 QueueHandle_t get_event_queue(void) { return xEventQueue; }
