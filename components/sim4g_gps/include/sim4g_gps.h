@@ -1,5 +1,7 @@
+
 #pragma once
 
+#include "esp_err.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -8,72 +10,79 @@ extern "C" {
 
 /**
  * @file sim4g_gps.h
- * @brief Public API for SIM4G GPS location and SMS alert services.
+ * @brief High-level GPS + SMS public interface for EC800K/4G module.
  *
- * This module provides high-level functions to control GPS functionality
- * and send SMS alerts using a 4G SIM module (e.g., EC800K).
- *
- * It encapsulates lower-level AT command communication and exposes
- * simplified interfaces for location retrieval and emergency SMS sending.
+ * Encapsulates location retrieval and SMS alerts using AT commands.
  */
 
 /**
- * @brief Struct to hold parsed GPS location data.
+ * @brief Parsed GPS data (decimal degrees).
  */
 typedef struct {
-  bool valid;         /**< Indicates whether the GPS data is valid */
-  char timestamp[20]; /**< UTC timestamp, format: "YYYYMMDDHHMMSS" */
+  bool valid;         /**< Whether GPS data is valid */
+  char timestamp[20]; /**< UTC time: "YYYYMMDDHHMMSS" */
   char latitude[20];  /**< Latitude in decimal degrees */
   char longitude[20]; /**< Longitude in decimal degrees */
 } sim4g_gps_data_t;
 
 /**
- * @brief Initialize the SIM4G GPS module.
+ * @brief Initialize SIM4G GPS subsystem.
  *
- * Enables GPS, performs required configuration.
+ * Creates internal resources and powers on GNSS module.
+ *
+ * @return ESP_OK on success, error code otherwise
  */
-void sim4g_gps_init(void);
+esp_err_t sim4g_gps_init(void);
 
 /**
- * @brief Set the phone number for SMS alerts.
+ * @brief Set target phone number for alert SMS.
  *
- * @param number Phone number in international format (e.g., "+84123456789")
+ * @param number Null-terminated string (e.g., "+849xxxxxxxx")
+ * @return ESP_OK if number is valid and stored, ESP_ERR_INVALID_ARG otherwise
  */
-void sim4g_gps_set_phone_number(const char *number);
+esp_err_t sim4g_gps_set_phone_number(const char *number);
 
 /**
- * @brief Retrieve the latest GPS location.
+ * @brief Check GPS power status.
  *
- * This function returns the latest valid GPS data, if available.
+ * @param[out] enabled Output flag (true = on, false = off)
+ * @return ESP_OK if command successful, ESP_FAIL otherwise
+ */
+esp_err_t sim4g_gps_is_enabled(bool *enabled);
+
+/**
+ * @brief Get current GPS location (thread-safe).
  *
- * @return sim4g_gps_data_t Struct containing timestamp, latitude, and longitude
+ * @param[out] out Output struct to store location
+ * @return ESP_OK if valid data obtained, ESP_FAIL otherwise
+ */
+esp_err_t sim4g_gps_update_location(sim4g_gps_data_t *out);
+
+/**
+ * @brief Convenience version of update_location returning copy.
+ *
+ * @note Use `update_location()` for thread-safe external logic.
+ *
+ * @return Latest GPS struct; valid = false if failed.
  */
 sim4g_gps_data_t sim4g_gps_get_location(void);
 
 /**
- * @brief Send a fall alert SMS with GPS coordinates.
+ * @brief Send SMS alert with GPS info (blocking).
  *
- * @param location Pointer to GPS data to include in the SMS
+ * @param[in] location Pointer to GPS data to embed in message
+ * @return ESP_OK if sent, ESP_FAIL otherwise
  */
-void send_fall_alert_sms(const sim4g_gps_data_t *location);
+esp_err_t sim4g_gps_send_fall_alert_sms(const sim4g_gps_data_t *location);
 
 /**
- * @brief Check whether GPS functionality is currently enabled.
+ * @brief Asynchronous version of fall alert (non-blocking).
  *
- * @return true if GPS is enabled, false otherwise
+ * @param[in] data     Valid GPS info
+ * @param[in] callback Optional callback (pass NULL if unused)
  */
-bool sim4g_gps_is_enabled(void);
-
-void sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *data,
-                                     void (*callback)(bool success));
-
-/**
- * @brief Update the current GPS location and store it in the provided struct.
- *
- * @param[out] out Pointer to struct where GPS data will be stored
- * @return true if valid GPS data was obtained, false otherwise
- */
-bool sim4g_gps_update_location(sim4g_gps_data_t *out);
+esp_err_t sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *data,
+                                          void (*callback)(bool success));
 
 #ifdef __cplusplus
 }

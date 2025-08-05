@@ -25,7 +25,6 @@ typedef struct {
   bool is_fall_detected; /*!< Flag: true if fall detected */
   uint8_t confidence;    /*!< Confidence level (0-100%) */
 } fall_event_t;
-
 #if CONFIG_FALL_LOGIC_ENABLE
 
 /**
