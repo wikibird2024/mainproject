@@ -15,6 +15,9 @@ idf_component_register(
         fall_logic 
         wifi_connect
         event_handler
+        json_wrapper
+        mqtt_client
+        common
 )
 
 # Đăng ký file Kconfig nếu cần tùy chỉnh

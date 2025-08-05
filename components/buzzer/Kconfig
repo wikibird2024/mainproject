@@ -1,23 +1,35 @@
-
 menu "Buzzer Configuration"
 
 config BUZZER_ENABLE
     bool "Enable Buzzer"
     default y
+    help
+      Enable this option to include the buzzer component in your project.
+      This allocates a GPIO pin and PWM timer. Disable to save resources.
 
 config BUZZER_GPIO
     int "GPIO pin for buzzer"
     depends on BUZZER_ENABLE
     default 13
+    help
+      Specify the GPIO pin number to be used for the buzzer's PWM output.
+      Ensure this pin is not in use by any other component.
 
 config BUZZER_FREQ
     int "Buzzer frequency (Hz)"
     depends on BUZZER_ENABLE
     default 2000
+    help
+      Set the frequency of the PWM signal. For a passive buzzer, this value
+      determines the pitch. For an active buzzer, a value in the 1-5 kHz
+      range is recommended to avoid audible buzzing artifacts.
 
 config BUZZER_DUTY
     int "LEDC duty (0-8191)"
     depends on BUZZER_ENABLE
     default 4095
+    help
+      Set the duty cycle for the PWM signal. The value is based on the 13-bit
+      resolution of the LEDC timer. A value of 4095 results in a 50% duty cycle.
 
 endmenu

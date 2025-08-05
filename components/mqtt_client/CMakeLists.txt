@@ -1,6 +1,6 @@
 
 idf_component_register(
-    SRCS "src/mqtt_client.c"
+    SRCS "src/my_mqtt_client.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_mqtt_idf cjson debugs 
+    REQUIRES esp_mqtt_idf common json_wrapper debugs 
 )

@@ -1685,6 +1685,7 @@ CONFIG_LED_INDICATOR_TASK_PRIORITY=5
 #
 # MQTT Client Configuration
 #
+CONFIG_MQTT_CLIENT_ENABLE=y
 CONFIG_MQTT_BROKER_URI="mqtts://io.adafruit.com:8883"
 CONFIG_MQTT_PUB_TOPIC="tranhao / Feeds / json_data"
 # end of MQTT Client Configuration

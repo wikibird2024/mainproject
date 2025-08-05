@@ -1,16 +1,24 @@
 
 menu "MQTT Client Configuration"
 
+config MQTT_CLIENT_ENABLE
+    bool "Enable MQTT Client"
+    default y
+    help
+        Enable or disable MQTT client functionality.
+
 config MQTT_BROKER_URI
     string "MQTT Broker URI"
+    depends on MQTT_CLIENT_ENABLE
     default "mqtt://broker.hivemq.com"
     help
-        MQTT URI used to connect to the broker.
+        MQTT broker URI to connect to.
 
 config MQTT_PUB_TOPIC
     string "MQTT Publish Topic"
+    depends on MQTT_CLIENT_ENABLE
     default "esp32/device/data"
     help
-        Topic to publish device data to.
+        MQTT topic to publish device data.
 
 endmenu
