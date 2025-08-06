@@ -1,28 +1,28 @@
 menu "Communication Configuration"
 
     menu "UART Settings"
-        config UART_PORT_NUM
+        config COMM_UART_PORT_NUM
             int "UART Port Number"
             range 0 2
             default 1
             help
                 UART port number (0=UART0, 1=UART1, 2=UART2)
 
-        config UART_TX_PIN
+        config COMM_UART_TX_PIN
             int "UART TX GPIO"
             range 0 33
             default 17
             help
                 GPIO for UART transmission
 
-        config UART_RX_PIN
+        config COMM_UART_RX_PIN
             int "UART RX GPIO"
             range 0 33
             default 16
             help
                 GPIO for UART reception
 
-        config UART_BAUD_RATE
+        config COMM_UART_BAUD_RATE
             int "UART Baud Rate"
             default 115200
             help
@@ -30,34 +30,34 @@ menu "Communication Configuration"
     endmenu
 
     menu "I2C Settings"
-        config I2C_PORT_NUM
+        config COMM_I2C_PORT_NUM
             int "I2C Port Number"
             range 0 1
             default 0
             help
                 I2C port number (0=I2C_NUM_0, 1=I2C_NUM_1)
 
-        config I2C_SDA_PIN
+        config COMM_I2C_SDA_PIN
             int "I2C SDA GPIO"
             range 0 33
             default 21
             help
                 GPIO for I2C data line
 
-        config I2C_SCL_PIN
+        config COMM_I2C_SCL_PIN
             int "I2C SCL GPIO"
             range 0 33
             default 22
             help
                 GPIO for I2C clock line
 
-        config I2C_CLOCK_SPEED
+        config COMM_I2C_CLOCK_SPEED
             int "I2C Clock Speed (Hz)"
             default 400000
             help
                 I2C communication frequency
 
-        config I2C_DEVICE_ADDR
+        config COMM_I2C_DEVICE_ADDR
             hex "Default I2C Device Address"
             default 0x68
             help
@@ -65,14 +65,14 @@ menu "Communication Configuration"
     endmenu
 
     menu "GPIO Settings"
-        config DEFAULT_LED_GPIO
+        config COMM_DEFAULT_LED_GPIO
             int "Default LED GPIO"
             range 0 33
             default 2
             help
                 GPIO for status LED
 
-        config DEFAULT_BUTTON_GPIO
+        config COMM_DEFAULT_BUTTON_GPIO
             int "Default Button GPIO"
             range 0 33
             default 0

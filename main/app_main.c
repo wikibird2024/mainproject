@@ -38,19 +38,52 @@ static bool application_started = false;
 static esp_err_t init_components(void) {
   esp_err_t ret;
 
-  // Data Manager must be initialized first to be used by other modules.
+  // 1. Data Manager must be initialized first to be used by other modules.
   ret = data_manager_init();
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to initialize Data Manager");
     return ret;
   }
   ESP_LOGI(TAG, "Data Manager initialized");
+  
+  // 2. Event Handler (Initialized after Data Manager)
+  ret = event_handler_init();
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize Event Handler");
+    return ret;
+  }
+  ESP_LOGI(TAG, "Event Handler initialized");
+  
+  // 3. Peripherals
+  buzzer_init();
+  ESP_LOGI(TAG, "Buzzer initialized");
 
-  // Communication interfaces
+  led_indicator_init();
+  ESP_LOGI(TAG, "LED indicator initialized");
+
+  // 4. Fall logic module
+  ret = fall_logic_init();
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize Fall Logic");
+    return ret;
+  }
+  ESP_LOGI(TAG, "Fall Logic initialized");
+  
+  // 5. SIM4G and GPS
+  // The new sim4g_gps_init() now handles its own AT driver initialization
+  ret = sim4g_gps_init();
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize SIM4G GPS");
+    return ret;
+  }
+  sim4g_gps_set_phone_number(CONFIG_SIM4G_DEFAULT_PHONE);
+  ESP_LOGI(TAG, "SIM4G GPS initialized with phone: %s", CONFIG_SIM4G_DEFAULT_PHONE);
+  
+  // 6. Communication interfaces
   comm_init_all();
   ESP_LOGI(TAG, "Communication interfaces initialized");
-
-  // WiFi connection
+  
+  // 7. WiFi connection
   ret = wifi_connect_sta(0);
   if (ret == ESP_OK) {
     ESP_LOGI(TAG, "WiFi connected successfully");
@@ -58,41 +91,13 @@ static esp_err_t init_components(void) {
     ESP_LOGW(TAG, "WiFi connection failed, continuing without WiFi");
   }
 
-  // Peripherals
-  buzzer_init();
-  ESP_LOGI(TAG, "Buzzer initialized");
-
-  led_indicator_init();
-  ESP_LOGI(TAG, "LED indicator initialized");
-
-  // SIM module
-  sim4g_gps_init();
-  sim4g_gps_set_phone_number(CONFIG_SIM4G_DEFAULT_PHONE);
-  ESP_LOGI(TAG, "SIM4G GPS initialized with phone: %s", CONFIG_SIM4G_DEFAULT_PHONE);
-
-  // Fall logic module
-  ret = fall_logic_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize Fall Logic");
-    return ret;
-  }
-  ESP_LOGI(TAG, "Fall Logic initialized");
-
-  // Mqtt module
+  // 8. Mqtt module
   ret = user_mqtt_init(CONFIG_USER_MQTT_BROKER_URI);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to initialize MQTT");
     return ret;
   }
   ESP_LOGI(TAG, "MQTT initialized");
-  
-  // Event Handler (Initialized after other modules are ready)
-  ret = event_handler_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize Event Handler");
-    return ret;
-  }
-  ESP_LOGI(TAG, "Event Handler initialized");
 
   return ESP_OK;
 }
@@ -148,6 +153,10 @@ esp_err_t app_start_application(void) {
     return ESP_OK;
   }
   
+  // The new sim4g_gps_init() no longer needs to be called here.
+  // It is now called once in init_components.
+
+  // Start the fall logic task
   esp_err_t ret = fall_logic_start();
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to start fall logic");

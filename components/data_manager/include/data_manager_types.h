@@ -5,33 +5,33 @@
 extern "C" {
 #endif
 
-#include <stdbool.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include "sim4g_gps.h"
 
 /**
- * @brief Cấu trúc dữ liệu chứa tất cả trạng thái của thiết bị.
+ * @brief Data structure containing all device state.
  *
- * Đây là nguồn dữ liệu duy nhất (Single Source of Truth) cho toàn bộ hệ thống.
- * Mọi module đều lấy dữ liệu từ đây để đảm bảo tính nhất quán.
+ * This serves as the Single Source of Truth for the entire system.
+ * All modules get data from here to ensure consistency.
  */
 typedef struct {
-    // Thông tin cơ bản
+    // Basic Information
     char device_id[32];
-    uint32_t timestamp_ms;
+    uint64_t timestamp_ms; // Using 64-bit for millisecond timestamp
 
-    // Trạng thái cảm biến
+    // Sensor State
     bool fall_detected;
 
-    // Trạng thái kết nối
+    // Connection State
     bool wifi_connected;
     bool mqtt_connected;
     bool sim_registered;
 
-    // Dữ liệu GPS
-    double latitude;
-    double longitude;
+    // GPS Data
+    sim4g_gps_data_t gps_data; // MODIFIED: Using the new GPS data struct
 
-    // Thêm các trường dữ liệu khác nếu cần
+    // Add other data fields as needed
 } device_state_t;
 
 #ifdef __cplusplus

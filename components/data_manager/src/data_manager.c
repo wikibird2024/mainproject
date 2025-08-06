@@ -1,19 +1,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "data_manager.h"
-#include "event_handler.h" // Vẫn cần để khai báo system_event_t
+#include <string.h>
+#include <stdio.h>
 #include "esp_log.h"
 #include "esp_timer.h"
-#include <string.h> // Cần cho memset và memcpy
-#include <stdio.h>  // Cần cho snprintf
 #include "esp_random.h"
+
+#include "data_manager.h"
+#include "sim4g_gps.h" // For sim4g_gps_data_t
+#include "event_handler.h" // Still needed for system_event_t
 
 static const char *TAG = "DATA_MANAGER";
 static device_state_t s_device_state;
 static SemaphoreHandle_t s_data_mutex;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Khởi tạo và giải phóng
+// Initialization and Deinitialization
 // ─────────────────────────────────────────────────────────────────────────────
 
 esp_err_t data_manager_init(void) {
@@ -40,7 +42,7 @@ void data_manager_deinit(void) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Các hàm GET
+// GET Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 esp_err_t data_manager_get_device_state(device_state_t *state) {
@@ -65,12 +67,16 @@ bool data_manager_get_fall_status(void) {
     return status;
 }
 
-void data_manager_get_gps_location(double *latitude, double *longitude) {
-    if (xSemaphoreTake(s_data_mutex, portMAX_DELAY) == pdTRUE) {
-        *latitude = s_device_state.latitude;
-        *longitude = s_device_state.longitude;
-        xSemaphoreGive(s_data_mutex);
+esp_err_t data_manager_get_gps_data(sim4g_gps_data_t *data) {
+    if (data == NULL) {
+        return ESP_ERR_INVALID_ARG;
     }
+    if (xSemaphoreTake(s_data_mutex, portMAX_DELAY) == pdTRUE) {
+        memcpy(data, &s_device_state.gps_data, sizeof(sim4g_gps_data_t));
+        xSemaphoreGive(s_data_mutex);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
 }
 
 bool data_manager_get_wifi_status(void) {
@@ -107,7 +113,7 @@ esp_err_t data_manager_get_device_id(char* id_buffer, size_t buffer_size) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Các hàm SET
+// SET Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 esp_err_t data_manager_set_fall_status(bool state) {
@@ -118,20 +124,21 @@ esp_err_t data_manager_set_fall_status(bool state) {
 
         ESP_LOGI(TAG, "Fall status updated to: %s", state ? "true" : "false");
 
-        // Đã loại bỏ logic phát sự kiện ở đây để chuyển trách nhiệm cho fall_logic.c
         return ESP_OK;
     }
     return ESP_FAIL;
 }
 
-esp_err_t data_manager_set_gps_location(double latitude, double longitude) {
+esp_err_t data_manager_set_gps_data(const sim4g_gps_data_t *data) {
+    if (data == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     if (xSemaphoreTake(s_data_mutex, portMAX_DELAY) == pdTRUE) {
-        s_device_state.latitude = latitude;
-        s_device_state.longitude = longitude;
+        memcpy(&s_device_state.gps_data, data, sizeof(sim4g_gps_data_t));
         s_device_state.timestamp_ms = esp_timer_get_time() / 1000;
         xSemaphoreGive(s_data_mutex);
         
-        ESP_LOGI(TAG, "GPS location updated: Lat=%.6f, Lon=%.6f", latitude, longitude);
+        ESP_LOGI(TAG, "GPS data updated: has_fix=%s", data->has_gps_fix ? "true" : "false");
         return ESP_OK;
     }
     return ESP_FAIL;

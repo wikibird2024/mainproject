@@ -32,8 +32,8 @@ char *json_wrapper_create_payload(void) {
     // 4. Thêm các trường dữ liệu khác vào đối tượng JSON
     cJSON_AddStringToObject(root, "device_id", data.device_id);
     cJSON_AddBoolToObject(root, "fall_detected", data.fall_detected);
-    cJSON_AddNumberToObject(root, "latitude", data.latitude);
-    cJSON_AddNumberToObject(root, "longitude", data.longitude);
+    cJSON_AddNumberToObject(root, "latitude", data.gps_data.latitude);
+    cJSON_AddNumberToObject(root, "longitude", data.gps_data.longitude);
 
     // 5. In đối tượng JSON ra chuỗi
     char *json_str = cJSON_PrintUnformatted(root);

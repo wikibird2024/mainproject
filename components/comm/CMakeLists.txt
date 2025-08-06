@@ -1,3 +1,3 @@
 idf_component_register(SRCS "src/comm.c"
                        INCLUDE_DIRS "include"
-                       PRIV_REQUIRES driver log)
+                       REQUIRES driver log)

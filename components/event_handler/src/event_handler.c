@@ -3,7 +3,7 @@
 #include "led_indicator.h"
 #include "sim4g_gps.h"
 #include "data_manager.h"
-#include "fall_logic.h" // Thêm include fall_logic.h để truy cập hàm reset
+#include "fall_logic.h" 
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -19,17 +19,12 @@
 static const char *TAG = "EVENT_HANDLER";
 
 static QueueHandle_t s_event_queue_handle = NULL;
-static TaskHandle_t s_alert_task_handle = NULL;
+static TaskHandle_t s_event_handler_task_handle = NULL;
 
-static void sms_callback(bool success) {
-  if (success) {
-    ESP_LOGI(TAG, "SMS sent successfully.");
-  } else {
-    ESP_LOGE(TAG, "Failed to send SMS.");
-  }
-}
+// The old sms_callback is no longer needed as the new sim4g_gps_send_fall_alert_async
+// does not require a callback and handles the logic internally.
 
-static void alert_task(void *param) {
+static void event_handler_task(void *param) {
   system_event_t event;
 
   ESP_LOGI(TAG, "Event handler task started");
@@ -40,17 +35,13 @@ static void alert_task(void *param) {
         case EVENT_FALL_DETECTED: {
           ESP_LOGI(TAG, "Received EVENT_FALL_DETECTED. Triggering alert.");
           
+          // Get the latest GPS data from the refactored data_manager
           sim4g_gps_data_t location = {0};
+          data_manager_get_gps_data(&location);
           
-          data_manager_get_gps_location(&location.latitude, &location.longitude);
-          
-          if (location.latitude != 0.0 || location.longitude != 0.0) {
-              location.valid = true;
-          } else {
-              ESP_LOGW(TAG, "Failed to get valid GPS location from data_manager. Sending alert without location.");
-          }
-
-          sim4g_gps_send_fall_alert_async(&location, sms_callback);
+          // Send the alert asynchronously. The new function handles the
+          // SMS and MQTT logic, and it correctly uses the has_gps_fix flag.
+          sim4g_gps_send_fall_alert_async(location);
 
           buzzer_beep(ALERT_DURATION_MS);
           led_indicator_set_mode(LED_MODE_BLINK_ERROR);
@@ -60,13 +51,21 @@ static void alert_task(void *param) {
           buzzer_stop();
           led_indicator_set_mode(LED_MODE_OFF);
 
-          // BƯỚC MỚI: Hoàn tất vòng lặp phản hồi
-          // Sau khi hoàn tất chuỗi cảnh báo, reset trạng thái ngã trong fall_logic
+          // Once the alert sequence is complete, reset the fall status
           fall_logic_reset_fall_status();
           ESP_LOGI(TAG, "Alert sequence completed. Fall status has been reset.");
 
           break;
         }
+        case EVENT_WIFI_CONNECTED:
+            ESP_LOGI(TAG, "Received EVENT_WIFI_CONNECTED.");
+            // Add your logic for WiFi connected, e.g., MQTT reconnect.
+            break;
+        
+        case EVENT_MQTT_CONNECTED:
+            ESP_LOGI(TAG, "Received EVENT_MQTT_CONNECTED.");
+            // Add your logic for MQTT connected.
+            break;
 
         default:
           ESP_LOGI(TAG, "Received unknown event: %d. Ignored.", event);
@@ -77,7 +76,7 @@ static void alert_task(void *param) {
 }
 
 esp_err_t event_handler_init(void) {
-  if (s_event_queue_handle != NULL || s_alert_task_handle != NULL) {
+  if (s_event_queue_handle != NULL || s_event_handler_task_handle != NULL) {
     ESP_LOGW(TAG, "Event handler already initialized");
     return ESP_ERR_INVALID_STATE;
   }
@@ -88,12 +87,12 @@ esp_err_t event_handler_init(void) {
     return ESP_FAIL;
   }
 
-  BaseType_t result = xTaskCreate(alert_task,
+  BaseType_t result = xTaskCreate(event_handler_task,
                                   "event_handler_task",
                                   EVENT_HANDLER_TASK_STACK_SIZE,
                                   NULL,
                                   EVENT_HANDLER_TASK_PRIORITY,
-                                  &s_alert_task_handle);
+                                  &s_event_handler_task_handle);
 
   if (result != pdPASS) {
     ESP_LOGE(TAG, "Failed to create event handler task");
@@ -107,9 +106,9 @@ esp_err_t event_handler_init(void) {
 }
 
 esp_err_t event_handler_deinit(void) {
-  if (s_alert_task_handle != NULL) {
-    vTaskDelete(s_alert_task_handle);
-    s_alert_task_handle = NULL;
+  if (s_event_handler_task_handle != NULL) {
+    vTaskDelete(s_event_handler_task_handle);
+    s_event_handler_task_handle = NULL;
   }
 
   if (s_event_queue_handle != NULL) {
@@ -125,16 +124,6 @@ esp_err_t event_handler_send_event(system_event_t event) {
     if (s_event_queue_handle == NULL) {
         ESP_LOGE(TAG, "Event handler not initialized");
         return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Logic này vẫn chưa hoàn hảo, nó không đảm bảo 100% không trùng.
-    // Với logic mới, fall_logic.c đã tự quản lý trạng thái, nên đoạn code này có thể đơn giản hóa.
-    if (event == EVENT_FALL_DETECTED) {
-        UBaseType_t count = uxQueueMessagesWaiting(s_event_queue_handle);
-        if (count > 0) {
-            ESP_LOGW(TAG, "Fall event already in queue. Ignoring.");
-            return ESP_OK;
-        }
     }
     
     BaseType_t ret = xQueueSend(s_event_queue_handle, &event, pdMS_TO_TICKS(10));

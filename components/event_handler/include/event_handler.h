@@ -27,7 +27,7 @@ typedef enum {
  * @brief Initializes the event handler module.
  *
  * This function creates an internal FreeRTOS task and a queue to listen for
- * system events. It does not require any external handles.
+ * system events.
  *
  * @return
  * - ESP_OK on success.
@@ -47,8 +47,8 @@ esp_err_t event_handler_deinit(void);
 /**
  * @brief Sends a system event to the event handler's internal queue.
  *
- * This is the primary function for other modules (e.g., data_manager) to
- * notify the event handler of significant changes or occurrences.
+ * This is the primary function for other modules to
+ * notify the event handler of significant occurrences.
  *
  * @param event The event to be sent.
  * @return

@@ -9,44 +9,47 @@ extern "C" {
 #include "data_manager_types.h"
 
 /**
- * @brief Khởi tạo module quản lý dữ liệu.
+ * @brief Initializes the data management module.
  *
- * Hàm này tạo mutex bảo vệ dữ liệu và khởi tạo trạng thái ban đầu của thiết bị.
- * @return esp_err_t ESP_OK nếu khởi tạo thành công.
+ * This function creates the data mutex and initializes the device's state.
+ * @return esp_err_t ESP_OK on successful initialization.
  */
 esp_err_t data_manager_init(void);
 
 /**
- * @brief Giải phóng tài nguyên của module quản lý dữ liệu.
+ * @brief Deinitializes the data management module.
  */
 void data_manager_deinit(void);
 
 /**
- * @brief Lấy bản sao dữ liệu hiện tại của thiết bị.
+ * @brief Gets a copy of the current device state.
  *
- * Hàm này đảm bảo an toàn luồng và trả về một bản sao dữ liệu.
- * @param[out] state Con trỏ tới cấu trúc device_state_t để lưu bản sao dữ liệu.
- * @return esp_err_t ESP_OK nếu thành công.
+ * This function is thread-safe and returns a copy of the state data.
+ * @param[out] state A pointer to the device_state_t structure to store the copy.
+ * @return esp_err_t ESP_OK on success.
  */
 esp_err_t data_manager_get_device_state(device_state_t *state);
 
 /**
- * @brief Lấy trạng thái phát hiện ngã hiện tại.
+ * @brief Gets the current fall detection status.
  */
 bool data_manager_get_fall_status(void);
 
 /**
- * @brief Lấy tọa độ GPS hiện tại.
+ * @brief Gets the current GPS data.
+ *
+ * This function is thread-safe.
+ * @param[out] data A pointer to the sim4g_gps_data_t structure to store the data.
  */
-void data_manager_get_gps_location(double *latitude, double *longitude);
+esp_err_t data_manager_get_gps_data(sim4g_gps_data_t *data);
 
 /**
- * @brief Lấy trạng thái kết nối Wi-Fi hiện tại.
+ * @brief Gets the current WiFi connection status.
  */
 bool data_manager_get_wifi_status(void);
 
 /**
- * @brief Lấy trạng thái kết nối MQTT hiện tại.
+ * @brief Gets the current MQTT connection status.
  */
 bool data_manager_get_mqtt_status(void);
 
@@ -59,41 +62,40 @@ bool data_manager_get_mqtt_status(void);
 esp_err_t data_manager_get_device_id(char* id_buffer, size_t buffer_size);
 
 /**
- * @brief Cập nhật trạng thái phát hiện ngã.
- *
- * Hàm này cũng sẽ phát ra một sự kiện `EVENT_FALL_DETECTED` nếu trạng thái thay đổi.
- * @param state Trạng thái ngã mới.
+ * @brief Sets the fall detection status.
+ * @param state The new fall status.
  */
 esp_err_t data_manager_set_fall_status(bool state);
 
 /**
- * @brief Cập nhật tọa độ GPS.
- * @param latitude Vĩ độ mới.
- * @param longitude Kinh độ mới.
+ * @brief Sets the GPS data.
+ *
+ * This function is thread-safe.
+ * @param data A pointer to the sim4g_gps_data_t structure containing the new data.
  */
-esp_err_t data_manager_set_gps_location(double latitude, double longitude);
+esp_err_t data_manager_set_gps_data(const sim4g_gps_data_t *data);
 
 /**
- * @brief Cập nhật trạng thái kết nối Wi-Fi.
- * @param connected Trạng thái kết nối mới.
+ * @brief Sets the WiFi connection status.
+ * @param connected The new connection status.
  */
 esp_err_t data_manager_set_wifi_status(bool connected);
 
 /**
- * @brief Cập nhật trạng thái kết nối MQTT.
- * @param connected Trạng thái kết nối mới.
+ * @brief Sets the MQTT connection status.
+ * @param connected The new connection status.
  */
 esp_err_t data_manager_set_mqtt_status(bool connected);
 
 /**
- * @brief Cập nhật trạng thái đăng ký SIM.
- * @param registered Trạng thái đăng ký mới.
+ * @brief Sets the SIM registration status.
+ * @param registered The new registration status.
  */
 esp_err_t data_manager_set_sim_status(bool registered);
 
 /**
- * @brief Cập nhật ID thiết bị.
- * @param id Con trỏ tới chuỗi ID thiết bị.
+ * @brief Sets the device ID.
+ * @param id A pointer to the device ID string.
  */
 esp_err_t data_manager_set_device_id(const char* id);
 

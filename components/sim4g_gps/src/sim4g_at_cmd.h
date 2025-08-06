@@ -15,6 +15,7 @@
 // -----------------------------------------------------------
 typedef enum {
     AT_CMD_TEST_ID,
+    AT_CMD_GET_FIRMWARE_ID,
     AT_CMD_ECHO_OFF_ID,
     AT_CMD_SAVE_CFG_ID,
     AT_CMD_GET_MODULE_INFO_ID,

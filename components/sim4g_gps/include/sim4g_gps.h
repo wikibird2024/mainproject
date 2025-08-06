@@ -19,11 +19,13 @@ extern "C" {
  */
 typedef struct {
   bool valid;         /**< Whether GPS data is valid */
-  char timestamp[20]; /**< UTC time: "YYYYMMDDHHMMSS" */
+  char timestamp[32]; /**< UTC time: "YYYYMMDDHHMMSS" */
   double latitude;    /**< Latitude in decimal degrees */
   double longitude;   /**< Longitude in decimal degrees */
+  bool has_gps_fix; /**< Flag to indicate if GPS is valid */
 } sim4g_gps_data_t;
 
+esp_err_t sim4g_gps_update_location(void);
 /**
  * @brief Initialize SIM4G GPS subsystem.
  *
@@ -72,8 +74,7 @@ esp_err_t sim4g_gps_send_fall_alert_sms(const sim4g_gps_data_t *location);
  * @param[in] location Valid GPS info
  * @param[in] callback Optional callback (pass NULL if unused)
  */
-esp_err_t sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location,
-                                          void (*callback)(bool success));
+esp_err_t sim4g_gps_send_fall_alert_async(sim4g_gps_data_t data);
 
 #ifdef __cplusplus
 }
