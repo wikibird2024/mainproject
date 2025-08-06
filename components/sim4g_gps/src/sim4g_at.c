@@ -1,13 +1,18 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "sdkconfig.h"
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+
+#include "esp_log.h"
+#include "esp_err.h"
 
 #include "comm.h"
-#include "debugs.h"
 #include "sim4g_at.h"
 #include "sim4g_at_cmd.h"
+
+static const char *TAG = "SIM4G_AT";
 
 // -----------------------------------------------------------
 // AT Command Table Definition
@@ -52,7 +57,6 @@ const at_command_t at_command_table[AT_CMD_MAX_COUNT] = {
     [AT_CMD_CELL_LOCATE_ID]         = {AT_CMD_CELL_LOCATE_ID, "AT+CLBS=1\r\n", 500},
 };
 
-
 // -----------------------------------------------------------
 // Refactored Core Send Function
 // -----------------------------------------------------------
@@ -89,78 +93,77 @@ esp_err_t sim4g_at_send_by_id(at_cmd_id_t cmd_id, char *response, size_t len) {
 }
 
 // -----------------------------------------------------------
-//  GPS and SMS Functions
+//  Wrapper Functions for Specific Commands
 // -----------------------------------------------------------
+
 esp_err_t sim4g_at_enable_gps(void) {
     char resp[64] = {0};
 
-    // Optional: enable autogps feature
-    // Using the new function
-    sim4g_at_send_by_id(AT_CMD_GPS_AUTOGPS_ON_ID, NULL, 0);
-
-    // Using the new function
+    // Use the core send function with the correct AT command ID
     esp_err_t err = sim4g_at_send_by_id(AT_CMD_GPS_ENABLE_ID, resp, sizeof(resp));
     if (err != ESP_OK || !strstr(resp, "OK")) {
-        DEBUGS_LOGE("Enable GPS failed: %s", resp);
+        ESP_LOGE(TAG, "Enable GPS failed: %s", resp);
         return ESP_FAIL;
     }
 
-    DEBUGS_LOGI("GPS enabled");
+    ESP_LOGI(TAG, "GPS enabled");
     return ESP_OK;
 }
 
-esp_err_t sim4g_at_get_location(char *timestamp, char *lat, char *lon,
-                                size_t len) {
-    if (!timestamp || !lat || !lon)
+esp_err_t sim4g_at_get_location(char *timestamp, char *lat, char *lon) {
+    if (!timestamp || !lat || !lon) {
         return ESP_ERR_INVALID_ARG;
+    }
 
     char response[128] = {0};
 
-    // Using the new function
+    // Use the core send function to get the raw GPS data
     esp_err_t err = sim4g_at_send_by_id(AT_CMD_GPS_LOCATION_ID, response, sizeof(response));
-    if (err != ESP_OK)
+    if (err != ESP_OK) {
         return err;
+    }
 
-    int ret = sscanf(response, "+QGPSLOC: %19[^,],%19[^,],%19[^,]", timestamp,
-                     lat, lon);
+    // Use sscanf to parse the raw data into the output buffers
+    int ret = sscanf(response, "+QGPSLOC: %19[^,],%19[^,],%19[^,]", timestamp, lat, lon);
     if (ret != 3) {
-        DEBUGS_LOGW("Failed to parse GPS: %s", response);
+        ESP_LOGW(TAG, "Failed to parse GPS: %s", response);
         return ESP_FAIL;
     }
 
-    DEBUGS_LOGI("GPS OK: Time=%s Lat=%s Lon=%s", timestamp, lat, lon);
+    ESP_LOGI(TAG, "GPS OK: Time=%s Lat=%s Lon=%s", timestamp, lat, lon);
     return ESP_OK;
 }
 
 esp_err_t sim4g_at_send_sms(const char *phone, const char *message) {
-    if (!phone || !message)
+    if (!phone || !message) {
         return ESP_ERR_INVALID_ARG;
+    }
 
     char cmd[64];
-    char response[128];
-    const char *sms_prefix = at_command_table[AT_CMD_SEND_SMS_PREFIX_ID].cmd_string;
-    const uint32_t sms_timeout = at_command_table[AT_CMD_SEND_SMS_PREFIX_ID].timeout_ms;
-    const char *sms_end = at_command_table[AT_CMD_SMS_CTRL_Z_ID].cmd_string;
+    char response[128] = {0};
 
-    // Construct and send: AT+CMGS=""
-    snprintf(cmd, sizeof(cmd), "%s%s\"\r", sms_prefix, phone);
-    comm_uart_send_command(cmd, NULL, 0);
-    vTaskDelay(pdMS_TO_TICKS(sms_timeout));
+    // Step 1: Send the SMS prefix and phone number
+    snprintf(cmd, sizeof(cmd), "%s%s\"\r", at_command_table[AT_CMD_SEND_SMS_PREFIX_ID].cmd_string, phone);
+    comm_uart_send_command(cmd, response, sizeof(response));
 
-    // Send the SMS body
-    comm_uart_send_command(message, NULL, 0);
-    vTaskDelay(pdMS_TO_TICKS(sms_timeout));
+    // Check for the '>' prompt from the module
+    if (!strstr(response, ">")) {
+        ESP_LOGW(TAG, "Failed to get SMS prompt: %s", response);
+        return ESP_FAIL;
+    }
+    
+    // Step 2: Send the SMS body
+    comm_uart_send_command(message, response, sizeof(response));
 
-    // Send Ctrl+Z (end of message)
-    memset(response, 0, sizeof(response));
-    comm_uart_send_command(sms_end, response, sizeof(response));
+    // Step 3: Send Ctrl+Z to end the message
+    comm_uart_send_command(at_command_table[AT_CMD_SMS_CTRL_Z_ID].cmd_string, response, sizeof(response));
     vTaskDelay(pdMS_TO_TICKS(at_command_table[AT_CMD_SMS_CTRL_Z_ID].timeout_ms));
     
     if (strstr(response, "OK") || strstr(response, "+CMGS")) {
-        DEBUGS_LOGI("SMS sent to %s", phone);
+        ESP_LOGI(TAG, "SMS sent to %s", phone);
         return ESP_OK;
     }
 
-    DEBUGS_LOGW("SMS failed: %s", response);
+    ESP_LOGW(TAG, "SMS failed: %s", response);
     return ESP_FAIL;
 }

@@ -1,98 +1,81 @@
-#pragma once
-#include "esp_err.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
-#include <stdbool.h>
-#include <stdint.h>
+#ifndef _FALL_LOGIC_H_
+#define _FALL_LOGIC_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief Fall detection event structure.
- *
- * This structure holds acceleration and event data
- * captured when a fall is detected or analyzed.
- */
-typedef struct {
-  uint32_t timestamp;    /*!< Timestamp (e.g., millis since boot) */
-  float acceleration_x;  /*!< Acceleration in X axis (g) */
-  float acceleration_y;  /*!< Acceleration in Y axis (g) */
-  float acceleration_z;  /*!< Acceleration in Z axis (g) */
-  float magnitude;       /*!< Acceleration magnitude (vector sum) */
-  bool is_fall_detected; /*!< Flag: true if fall detected */
-  uint8_t confidence;    /*!< Confidence level (0-100%) */
-} fall_event_t;
+#include "esp_err.h"
+#include "sdkconfig.h"
+#include "stdbool.h" // Thêm include để sử dụng kiểu bool
+
 #if CONFIG_FALL_LOGIC_ENABLE
 
 /**
- * @brief Initialize fall detection logic.
+ * @brief Initializes the fall detection module.
  *
- * This function sets up the fall detection logic by registering shared
- * resources such as mutex and event queue. These resources must be created
- * and owned by the application layer (`app_main.c`).
+ * This function sets up internal resources needed by the module.
+ * The module is self-contained and does not require external FreeRTOS handles.
  *
- * @param mutex         Handle to a mutex protecting shared sensor access
- * @param event_queue   Handle to a queue for posting fall events
  * @return
- *      - ESP_OK on success
- *      - ESP_ERR_INVALID_ARG if handles are invalid
- *      - ESP_FAIL if internal error occurs
+ * - ESP_OK on success
+ * - ESP_FAIL if an internal error occurs.
  */
-esp_err_t fall_logic_init(SemaphoreHandle_t mutex, QueueHandle_t event_queue);
+esp_err_t fall_logic_init(void);
 
 /**
- * @brief Start the fall detection task.
+ * @brief Starts the fall detection task.
  *
- * This function launches the FreeRTOS task that reads sensor data and
- * performs fall detection continuously.
+ * This launches a FreeRTOS task that reads sensor data and performs
+ * fall detection continuously.
  *
  * @return
- *      - ESP_OK on success
- *      - ESP_FAIL if task creation fails
+ * - ESP_OK on success
+ * - ESP_FAIL if task creation fails.
  */
 esp_err_t fall_logic_start(void);
 
 /**
- * @brief Enable fall detection logic at runtime.
- *
- * This allows enabling fall detection dynamically after boot.
- *
- * @return
- *      - ESP_OK on success
+ * @brief Enables fall detection logic at runtime.
+ * @return ESP_OK on success.
  */
 esp_err_t fall_logic_enable(void);
 
 /**
- * @brief Disable fall detection logic at runtime.
- *
- * Use this to pause or stop the fall detection task temporarily.
- *
- * @return
- *      - ESP_OK on success
+ * @brief Disables fall detection logic at runtime.
+ * @return ESP_OK on success.
  */
 esp_err_t fall_logic_disable(void);
 
 /**
- * @brief Check if fall detection logic is currently active.
- *
+ * @brief Checks if fall detection logic is currently active.
  * @return true if enabled, false otherwise.
  */
 bool fall_logic_is_enabled(void);
 
+/**
+ * @brief Resets the fall detection status, allowing for new fall events to be triggered.
+ *
+ * This function should be called by the event handler after an alert has been completed.
+ *
+ * @return ESP_OK on success.
+ */
+esp_err_t fall_logic_reset_fall_status(void);
+
 #else // CONFIG_FALL_LOGIC_ENABLE disabled
 
 // Fallback macros if fall logic is not enabled in Kconfig
-#define fall_logic_init(mutex, queue) (ESP_OK)
+#define fall_logic_init() (ESP_OK)
 #define fall_logic_start() (ESP_OK)
 #define fall_logic_enable() (ESP_OK)
 #define fall_logic_disable() (ESP_OK)
 #define fall_logic_is_enabled() (false)
+#define fall_logic_reset_fall_status() (ESP_OK) // Fallback cho hàm mới
 
 #endif // CONFIG_FALL_LOGIC_ENABLE
 
 #ifdef __cplusplus
 }
 #endif
+
+#endif // _FALL_LOGIC_H_

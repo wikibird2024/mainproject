@@ -1,143 +1,146 @@
 #include "event_handler.h"
 #include "buzzer.h"
-#include "debugs.h"
-#include "fall_logic.h"
 #include "led_indicator.h"
 #include "sim4g_gps.h"
-#include <inttypes.h> // Dùng PRIu32 để log uint32_t và uint8_t an toàn
+#include "data_manager.h"
+#include "fall_logic.h" // Thêm include fall_logic.h để truy cập hàm reset
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_log.h"
+#include "esp_err.h"
 
 #define ALERT_DURATION_MS 8000
+#define EVENT_QUEUE_LENGTH 10
+#define EVENT_HANDLER_TASK_STACK_SIZE 4096
+#define EVENT_HANDLER_TASK_PRIORITY 5
 
-// Static variables
-static QueueHandle_t event_queue_handle = NULL;
-static TaskHandle_t alert_task_handle = NULL;
+static const char *TAG = "EVENT_HANDLER";
 
-/**
- * @brief Callback for SMS sending result
- */
+static QueueHandle_t s_event_queue_handle = NULL;
+static TaskHandle_t s_alert_task_handle = NULL;
+
 static void sms_callback(bool success) {
   if (success) {
-    DEBUGS_LOGI("SMS sent successfully.");
+    ESP_LOGI(TAG, "SMS sent successfully.");
   } else {
-    DEBUGS_LOGE("Failed to send SMS.");
+    ESP_LOGE(TAG, "Failed to send SMS.");
   }
 }
 
-/**
- * @brief Task to handle fall events received from fall_logic
- */
 static void alert_task(void *param) {
-  fall_event_t event;
-  QueueHandle_t queue = (QueueHandle_t)param;
+  system_event_t event;
 
-  if (queue == NULL) {
-    DEBUGS_LOGE("Alert task received NULL queue handle");
-    vTaskDelete(NULL);
-    return;
-  }
+  ESP_LOGI(TAG, "Event handler task started");
 
   while (1) {
-    if (xQueueReceive(queue, &event, portMAX_DELAY)) {
-      DEBUGS_LOGI(
-          "Fall event received: timestamp=%" PRIu32
-          ", accel=(%.2f, %.2f, %.2f), magnitude=%.2f, confidence=%" PRIu8 "%%",
-          event.timestamp, event.acceleration_x, event.acceleration_y,
-          event.acceleration_z, event.magnitude, event.confidence);
+    if (xQueueReceive(s_event_queue_handle, &event, portMAX_DELAY)) {
+      switch (event) {
+        case EVENT_FALL_DETECTED: {
+          ESP_LOGI(TAG, "Received EVENT_FALL_DETECTED. Triggering alert.");
+          
+          sim4g_gps_data_t location = {0};
+          
+          data_manager_get_gps_location(&location.latitude, &location.longitude);
+          
+          if (location.latitude != 0.0 || location.longitude != 0.0) {
+              location.valid = true;
+          } else {
+              ESP_LOGW(TAG, "Failed to get valid GPS location from data_manager. Sending alert without location.");
+          }
 
-      if (event.is_fall_detected) {
-        // Step 1: Get GPS location
-        sim4g_gps_data_t location = sim4g_gps_get_location();
+          sim4g_gps_send_fall_alert_async(&location, sms_callback);
 
-        // Step 2: Send alert SMS
-        sim4g_gps_send_fall_alert_async(&location, sms_callback);
+          buzzer_beep(ALERT_DURATION_MS);
+          led_indicator_set_mode(LED_MODE_BLINK_ERROR);
 
-        // Step 3: Trigger buzzer and LED
-        buzzer_beep(ALERT_DURATION_MS);
-        led_indicator_set_mode(LED_MODE_BLINK_ERROR);
+          vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
 
-        // Step 4: Wait
-        vTaskDelay(pdMS_TO_TICKS(ALERT_DURATION_MS));
+          buzzer_stop();
+          led_indicator_set_mode(LED_MODE_OFF);
 
-        // Step 5: Stop alert
-        buzzer_stop();
-        led_indicator_set_mode(LED_MODE_OFF);
-      } else {
-        DEBUGS_LOGW("Received non-fall event. Ignored.");
+          // BƯỚC MỚI: Hoàn tất vòng lặp phản hồi
+          // Sau khi hoàn tất chuỗi cảnh báo, reset trạng thái ngã trong fall_logic
+          fall_logic_reset_fall_status();
+          ESP_LOGI(TAG, "Alert sequence completed. Fall status has been reset.");
+
+          break;
+        }
+
+        default:
+          ESP_LOGI(TAG, "Received unknown event: %d. Ignored.", event);
+          break;
       }
     }
   }
 }
 
-/**
- * @brief Initialize the event handler with provided queue
- * @param queue Queue handle for receiving fall events
- * @return ESP_OK on success, ESP_ERR_INVALID_ARG if queue is NULL, ESP_FAIL if
- * task creation fails
- */
-esp_err_t event_handler_init(QueueHandle_t queue) {
-  // Validate input parameters
-  if (queue == NULL) {
-    DEBUGS_LOGE("Queue handle cannot be NULL");
-    return ESP_ERR_INVALID_ARG;
-  }
-
-  // Check if already initialized
-  if (event_queue_handle != NULL || alert_task_handle != NULL) {
-    DEBUGS_LOGW("Event handler already initialized");
+esp_err_t event_handler_init(void) {
+  if (s_event_queue_handle != NULL || s_alert_task_handle != NULL) {
+    ESP_LOGW(TAG, "Event handler already initialized");
     return ESP_ERR_INVALID_STATE;
   }
 
-  // Store queue handle
-  event_queue_handle = queue;
-
-  // Create alert task
-  BaseType_t result =
-      xTaskCreate(alert_task,        // Task function
-                  "fall_alert_task", // Task name
-                  4096,              // Stack size
-                  (void *)queue,     // Task parameter (queue handle)
-                  5,                 // Task priority
-                  &alert_task_handle // Task handle
-      );
-
-  if (result != pdPASS) {
-    DEBUGS_LOGE("Failed to create fall_alert_task");
-    event_queue_handle = NULL;
+  s_event_queue_handle = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(system_event_t));
+  if (s_event_queue_handle == NULL) {
+    ESP_LOGE(TAG, "Failed to create event queue");
     return ESP_FAIL;
   }
 
-  DEBUGS_LOGI("Event handler initialized successfully");
-  return ESP_OK;
-}
+  BaseType_t result = xTaskCreate(alert_task,
+                                  "event_handler_task",
+                                  EVENT_HANDLER_TASK_STACK_SIZE,
+                                  NULL,
+                                  EVENT_HANDLER_TASK_PRIORITY,
+                                  &s_alert_task_handle);
 
-/**
- * @brief Deinitialize the event handler
- * @return ESP_OK on success
- */
-esp_err_t event_handler_deinit(void) {
-  // Delete task if exists
-  if (alert_task_handle != NULL) {
-    vTaskDelete(alert_task_handle);
-    alert_task_handle = NULL;
+  if (result != pdPASS) {
+    ESP_LOGE(TAG, "Failed to create event handler task");
+    vQueueDelete(s_event_queue_handle);
+    s_event_queue_handle = NULL;
+    return ESP_FAIL;
   }
 
-  // Clear queue handle
-  event_queue_handle = NULL;
-
-  DEBUGS_LOGI("Event handler deinitialized");
+  ESP_LOGI(TAG, "Event handler initialized successfully");
   return ESP_OK;
 }
 
-/**
- * @brief Check if event handler is initialized
- * @return true if initialized, false otherwise
- */
-bool event_handler_is_initialized(void) {
-  return (event_queue_handle != NULL && alert_task_handle != NULL);
+esp_err_t event_handler_deinit(void) {
+  if (s_alert_task_handle != NULL) {
+    vTaskDelete(s_alert_task_handle);
+    s_alert_task_handle = NULL;
+  }
+
+  if (s_event_queue_handle != NULL) {
+    vQueueDelete(s_event_queue_handle);
+    s_event_queue_handle = NULL;
+  }
+
+  ESP_LOGI(TAG, "Event handler deinitialized");
+  return ESP_OK;
 }
 
-/**
- * @brief Get the queue handle (for backward compatibility or debugging)
- * @return Queue handle or NULL if not initialized
- */
-QueueHandle_t event_handler_get_queue(void) { return event_queue_handle; }
+esp_err_t event_handler_send_event(system_event_t event) {
+    if (s_event_queue_handle == NULL) {
+        ESP_LOGE(TAG, "Event handler not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Logic này vẫn chưa hoàn hảo, nó không đảm bảo 100% không trùng.
+    // Với logic mới, fall_logic.c đã tự quản lý trạng thái, nên đoạn code này có thể đơn giản hóa.
+    if (event == EVENT_FALL_DETECTED) {
+        UBaseType_t count = uxQueueMessagesWaiting(s_event_queue_handle);
+        if (count > 0) {
+            ESP_LOGW(TAG, "Fall event already in queue. Ignoring.");
+            return ESP_OK;
+        }
+    }
+    
+    BaseType_t ret = xQueueSend(s_event_queue_handle, &event, pdMS_TO_TICKS(10));
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to send event to queue. Queue full?");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}

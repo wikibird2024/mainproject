@@ -16,7 +16,6 @@ idf_component_register(
         nvs_flash        # Non-volatile storage (if used)
         user_mqtt        # Your MQTT component (if headers needed by others)
         json_wrapper     # JSON handling (if headers needed by others)
-        debugs           # Debug utilities (if headers needed by others)
         data_manager     # Moved to REQUIRES since other components depend on it
         comm 
     # Private dependencies - components used internally, headers not exposed

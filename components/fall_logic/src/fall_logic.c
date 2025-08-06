@@ -1,41 +1,39 @@
-/**
- * @file fall_logic.c
- * @brief Fall detection logic using MPU6050 sensor.
- *
- * This module provides logic to detect sudden falls based on acceleration data.
- * It runs a FreeRTOS task periodically to analyze sensor data, and sends a
- * fall_event_t to a provided queue when a fall is detected.
- */
-
 #include "fall_logic.h"
-#include "debugs.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "math.h"
 #include "mpu6050.h"
-#include "sdkconfig.h"
+#include "data_manager.h"
+#include "event_handler.h"
 
-// #define FALL_THRESHOLD CONFIG_FALL_LOGIC_THRESHOLD_G
+static const char *TAG = "FALL_LOGIC";
+
 #define FALL_THRESHOLD ((float)CONFIG_FALL_LOGIC_THRESHOLD_G / 1000.0f)
 #define CHECK_INTERVAL_MS CONFIG_FALL_LOGIC_CHECK_INTERVAL_MS
 #define FALL_TASK_STACK_SIZE CONFIG_FALL_LOGIC_TASK_STACK_SIZE
 #define FALL_TASK_PRIORITY CONFIG_FALL_LOGIC_TASK_PRIORITY
-#define MUTEX_TIMEOUT_MS 1000
 
-// Local static references (injected)
-static SemaphoreHandle_t s_mutex = NULL;
-static QueueHandle_t s_event_queue = NULL;
+// Biến nội bộ quản lý trạng thái
 static bool s_fall_logic_enabled = true;
+// Biến cờ mới để quản lý trạng thái ngã đã được phát hiện hay chưa
+static bool s_fall_detected = false; 
 
+/**
+ * @brief Simple algorithm to detect a fall based on acceleration magnitude.
+ * @param data Sensor data from MPU6050.
+ * @return true if a fall condition is detected, false otherwise.
+ */
 static bool detect_fall(sensor_data_t data) {
-  float total_accel =
-      sqrtf(data.accel_x * data.accel_x + data.accel_y * data.accel_y +
-            data.accel_z * data.accel_z);
+  float total_accel = sqrtf(data.accel_x * data.accel_x + data.accel_y * data.accel_y + data.accel_z * data.accel_z);
   return total_accel < FALL_THRESHOLD;
 }
 
+/**
+ * @brief FreeRTOS task for continuous fall detection.
+ */
 static void fall_task(void *param) {
-  DEBUGS_LOGI("Fall detection task started");
+  ESP_LOGI(TAG, "Fall detection task started");
 
   while (1) {
     if (!s_fall_logic_enabled) {
@@ -45,81 +43,69 @@ static void fall_task(void *param) {
 
     sensor_data_t data;
 
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS))) {
-      if (mpu6050_read_data(&data) == ESP_OK) {
-        if (detect_fall(data)) {
-          float magnitude =
-              sqrtf(data.accel_x * data.accel_x + data.accel_y * data.accel_y +
-                    data.accel_z * data.accel_z);
-
-          DEBUGS_LOGI("Fall contidion: Accel=(%.2f, %.2f, %.2f), Gyro=(%.2f, "
-                      "%.2f, %.2f)",
-                      data.accel_x, data.accel_y, data.accel_z, data.gyro_x,
-                      data.gyro_y, data.gyro_z);
-
-          fall_event_t event = {
-              .timestamp = xTaskGetTickCount() * portTICK_PERIOD_MS,
-              .acceleration_x = data.accel_x,
-              .acceleration_y = data.accel_y,
-              .acceleration_z = data.accel_z,
-              .magnitude = magnitude,
-              .is_fall_detected = true,
-              .confidence = 90 // Placeholder confidence
-          };
-
-          xQueueSend(s_event_queue, &event, 0);
-        }
-      } else {
-        DEBUGS_LOGW("Failed to read MPU6050 data");
+    if (mpu6050_read_data(&data) == ESP_OK) {
+      // Logic mới: Chỉ xử lý nếu chưa có cú ngã nào đang được xử lý
+      if (detect_fall(data) && !s_fall_detected) {
+        ESP_LOGW(TAG, "FALL DETECTED! Accel=(%.2f, %.2f, %.2f)",
+                 data.accel_x, data.accel_y, data.accel_z);
+                
+        // Gui su kien cho even handler
+        event_handler_send_event(EVENT_FALL_DETECTED); 
+                
+        // Đặt cờ ngã đã được phát hiện
+        s_fall_detected = true;
+        
       }
-
-      xSemaphoreGive(s_mutex);
     } else {
-      DEBUGS_LOGW("Failed to acquire mutex");
+      ESP_LOGE(TAG, "Failed to read MPU6050 data");
     }
 
     vTaskDelay(pdMS_TO_TICKS(CHECK_INTERVAL_MS));
   }
 }
 
-esp_err_t fall_logic_init(SemaphoreHandle_t mutex, QueueHandle_t event_queue) {
-  if (mutex == NULL || event_queue == NULL) {
-    DEBUGS_LOGE("Invalid mutex or event queue");
-    return ESP_ERR_INVALID_ARG;
-  }
-
-  s_mutex = mutex;
-  s_event_queue = event_queue;
-
-  DEBUGS_LOGI("Fall logic initialized");
+// Hàm khởi tạo module
+esp_err_t fall_logic_init(void) {
+  ESP_LOGI(TAG, "Fall logic initialized");
   return ESP_OK;
 }
 
-// Fix return esp_err_t
+// Bắt đầu task phát hiện ngã
 esp_err_t fall_logic_start(void) {
   BaseType_t result = xTaskCreate(fall_task, "fall_task", FALL_TASK_STACK_SIZE,
                                   NULL, FALL_TASK_PRIORITY, NULL);
 
   if (result != pdPASS) {
-    DEBUGS_LOGE("Failed to create fall_task");
+    ESP_LOGE(TAG, "Failed to create fall_task");
     return ESP_FAIL;
   }
 
-  DEBUGS_LOGI("Fall logic task created successfully");
+  ESP_LOGI(TAG, "Fall logic task created successfully");
   return ESP_OK;
 }
 
+// Các hàm enable/disable và kiểm tra trạng thái
 esp_err_t fall_logic_enable(void) {
   s_fall_logic_enabled = true;
-  DEBUGS_LOGI("Fall logic enabled");
+  ESP_LOGI(TAG, "Fall logic enabled");
   return ESP_OK;
 }
 
 esp_err_t fall_logic_disable(void) {
   s_fall_logic_enabled = false;
-  DEBUGS_LOGI("Fall logic disabled");
+  ESP_LOGI(TAG, "Fall logic disabled");
   return ESP_OK;
 }
 
-//------------------------------------
-bool fall_logic_is_enabled(void) { return s_fall_logic_enabled; }
+bool fall_logic_is_enabled(void) {
+  return s_fall_logic_enabled;
+}
+
+// Hàm mới để reset trạng thái ngã, được gọi từ event_handler
+esp_err_t fall_logic_reset_fall_status(void) {
+    if (s_fall_detected) {
+        s_fall_detected = false;
+        ESP_LOGI(TAG, "Fall status has been reset.");
+    }
+    return ESP_OK;
+}

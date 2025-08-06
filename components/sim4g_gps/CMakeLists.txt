@@ -7,5 +7,5 @@ idf_component_register(
     PRIV_INCLUDE_DIRS 
         "src"
     PRIV_REQUIRES 
-        driver freertos log comm debugs
-    )
+        driver freertos log comm data_manager
+)

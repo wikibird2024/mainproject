@@ -1,4 +1,5 @@
 
+
 /**
  * @file sim4g_at.h
  * @brief Public interface for the low-level SIM4G AT command driver.
@@ -54,8 +55,7 @@ esp_err_t sim4g_at_enable_gps(void);
  * @return esp_err_t ESP_OK if location data is successfully retrieved and parsed,
  *         ESP_ERR_INVALID_ARG for invalid pointers, or ESP_FAIL on error.
  */
-esp_err_t sim4g_at_get_location(char *timestamp, char *lat, char *lon, size_t len);
-
+esp_err_t sim4g_at_get_location(char *timestamp, char *lat, char *lon);
 /**
  * @brief Sends an SMS message to a specified phone number.
  *

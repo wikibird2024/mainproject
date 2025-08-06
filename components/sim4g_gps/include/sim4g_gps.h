@@ -1,8 +1,7 @@
-
 #pragma once
 
 #include "esp_err.h"
-#include <stdbool.h>
+#include <stdbool.h> // Thêm stdbool.h để định nghĩa kiểu bool
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,8 +20,8 @@ extern "C" {
 typedef struct {
   bool valid;         /**< Whether GPS data is valid */
   char timestamp[20]; /**< UTC time: "YYYYMMDDHHMMSS" */
-  char latitude[20];  /**< Latitude in decimal degrees */
-  char longitude[20]; /**< Longitude in decimal degrees */
+  double latitude;    /**< Latitude in decimal degrees */
+  double longitude;   /**< Longitude in decimal degrees */
 } sim4g_gps_data_t;
 
 /**
@@ -51,21 +50,13 @@ esp_err_t sim4g_gps_set_phone_number(const char *number);
 esp_err_t sim4g_gps_is_enabled(bool *enabled);
 
 /**
- * @brief Get current GPS location (thread-safe).
+ * @brief Get current GPS location and update it in the data_manager.
  *
- * @param[out] out Output struct to store location
- * @return ESP_OK if valid data obtained, ESP_FAIL otherwise
+ * @note This function handles communication with the GPS module.
+ *
+ * @return ESP_OK if valid data obtained and updated, ESP_FAIL otherwise
  */
-esp_err_t sim4g_gps_update_location(sim4g_gps_data_t *out);
-
-/**
- * @brief Convenience version of update_location returning copy.
- *
- * @note Use `update_location()` for thread-safe external logic.
- *
- * @return Latest GPS struct; valid = false if failed.
- */
-sim4g_gps_data_t sim4g_gps_get_location(void);
+esp_err_t sim4g_gps_update_location(void);
 
 /**
  * @brief Send SMS alert with GPS info (blocking).
@@ -78,10 +69,10 @@ esp_err_t sim4g_gps_send_fall_alert_sms(const sim4g_gps_data_t *location);
 /**
  * @brief Asynchronous version of fall alert (non-blocking).
  *
- * @param[in] data     Valid GPS info
+ * @param[in] location Valid GPS info
  * @param[in] callback Optional callback (pass NULL if unused)
  */
-esp_err_t sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *data,
+esp_err_t sim4g_gps_send_fall_alert_async(const sim4g_gps_data_t *location,
                                           void (*callback)(bool success));
 
 #ifdef __cplusplus
