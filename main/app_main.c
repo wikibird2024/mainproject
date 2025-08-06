@@ -36,70 +36,78 @@ static bool application_started = false;
  * @return ESP_OK on success, ESP_FAIL on failure.
  */
 static esp_err_t init_components(void) {
-  esp_err_t ret;
+    esp_err_t ret;
 
-  // 1. Data Manager must be initialized first to be used by other modules.
-  ret = data_manager_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize Data Manager");
-    return ret;
-  }
-  ESP_LOGI(TAG, "Data Manager initialized");
-  
-  // 2. Event Handler (Initialized after Data Manager)
-  ret = event_handler_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize Event Handler");
-    return ret;
-  }
-  ESP_LOGI(TAG, "Event Handler initialized");
-  
-  // 3. Peripherals
-  buzzer_init();
-  ESP_LOGI(TAG, "Buzzer initialized");
+    // 1. Data Manager - Cần phải chạy để các module khác ghi log
+    ret = data_manager_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Data Manager");
+        return ret; // Lỗi nghiêm trọng, dừng hệ thống
+    }
+    ESP_LOGI(TAG, "Data Manager initialized");
 
-  led_indicator_init();
-  ESP_LOGI(TAG, "LED indicator initialized");
+    // 2. Event Handler - Cần để xử lý sự kiện
+    ret = event_handler_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Event Handler");
+        return ret; // Lỗi nghiêm trọng
+    }
+    ESP_LOGI(TAG, "Event Handler initialized");
 
-  // 4. Fall logic module
-  ret = fall_logic_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize Fall Logic");
-    return ret;
-  }
-  ESP_LOGI(TAG, "Fall Logic initialized");
-  
-  // 5. SIM4G and GPS
-  // The new sim4g_gps_init() now handles its own AT driver initialization
-  ret = sim4g_gps_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize SIM4G GPS");
-    return ret;
-  }
-  sim4g_gps_set_phone_number(CONFIG_SIM4G_DEFAULT_PHONE);
-  ESP_LOGI(TAG, "SIM4G GPS initialized with phone: %s", CONFIG_SIM4G_DEFAULT_PHONE);
-  
-  // 6. Communication interfaces
-  comm_init_all();
-  ESP_LOGI(TAG, "Communication interfaces initialized");
-  
-  // 7. WiFi connection
-  ret = wifi_connect_sta(0);
-  if (ret == ESP_OK) {
-    ESP_LOGI(TAG, "WiFi connected successfully");
-  } else {
-    ESP_LOGW(TAG, "WiFi connection failed, continuing without WiFi");
-  }
+    // 3. Communication interfaces - Nền tảng cho tất cả giao tiếp
+    ret = comm_init_all();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Communication interfaces");
+        return ret; // Lỗi nghiêm trọng
+    }
+    ESP_LOGI(TAG, "Communication interfaces initialized");
 
-  // 8. Mqtt module
-  ret = user_mqtt_init(CONFIG_USER_MQTT_BROKER_URI);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize MQTT");
-    return ret;
-  }
-  ESP_LOGI(TAG, "MQTT initialized");
+    // 4. Các ngoại vi - Phụ thuộc vào Comm
+    buzzer_init();
+    ESP_LOGI(TAG, "Buzzer initialized");
+    
+    led_indicator_init();
+    ESP_LOGI(TAG, "LED indicator initialized");
 
-  return ESP_OK;
+    // 5. Fall logic - Cần thiết cho chức năng chính
+    ret = fall_logic_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Fall Logic");
+        return ret; // Lỗi nghiêm trọng
+    }
+    ESP_LOGI(TAG, "Fall Logic initialized");
+    
+    // 6. WiFi và MQTT - Có thể bị lỗi nhưng hệ thống vẫn chạy
+    ret = wifi_connect_sta(0);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi connection failed, continuing without WiFi");
+        // Không return, hệ thống tiếp tục
+    } else {
+        ESP_LOGI(TAG, "WiFi connected successfully");
+    }
+
+    ret = user_mqtt_init(CONFIG_USER_MQTT_BROKER_URI);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize MQTT");
+        // MQTT là giao tiếp chính. Bạn có thể coi đây là lỗi nghiêm trọng.
+        // Hoặc ghi log và tiếp tục nếu bạn có phương án dự phòng khác.
+        // Hiện tại, ta sẽ coi đây là lỗi nghiêm trọng.
+        return ret;
+    }
+    ESP_LOGI(TAG, "MQTT initialized");
+    
+    // 7. SIM4G và GPS - Không quan trọng bằng WiFi/MQTT
+    ret = sim4g_gps_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize SIM4G GPS. Continuing with other services...");
+        // Đây là điểm mấu chốt: KHÔNG return.
+        // Hệ thống đã ghi nhận lỗi và sẽ tiếp tục.
+    } else {
+        sim4g_gps_set_phone_number(CONFIG_SIM4G_DEFAULT_PHONE);
+        ESP_LOGI(TAG, "SIM4G GPS initialized with phone: %s", CONFIG_SIM4G_DEFAULT_PHONE);
+    }
+
+    return ESP_OK;
 }
 
 /**
