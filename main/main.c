@@ -9,5 +9,6 @@
 
 void app_main(void) {
   app_system_init();       // Orchestrate system init
+
   app_start_application(); // Start tasks or business logic
 }

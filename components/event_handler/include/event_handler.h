@@ -1,10 +1,8 @@
-#ifndef EVENT_HANDLER_H_
-#define EVENT_HANDLER_H_
+#pragma once
 
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,5 +37,3 @@ QueueHandle_t event_handler_get_queue(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // EVENT_HANDLER_H_

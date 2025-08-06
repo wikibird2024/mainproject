@@ -17,6 +17,7 @@
 #include "sdkconfig.h"
 #include "sim4g_gps.h"
 #include "wifi_connect.h"
+#include "user_mqtt.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration Macros
@@ -118,6 +119,10 @@ static esp_err_t init_components(void) {
   // Fall logic module
   fall_logic_init(xMutex, xEventQueue);
   DEBUGS_LOGI("Fall logic initialized");
+
+  // Mqtt module 
+  user_mqtt_init(CONFIG_USER_MQTT_BROKER_URI);  // Đảm bảo đã kết nối MQTT nếu có WiFi
+  DEBUGS_LOGI("Mqtt initialized");
 
   return ESP_OK;
 }

@@ -1648,6 +1648,10 @@ CONFIG_DEFAULT_BUTTON_GPIO=0
 # end of Communication Configuration
 
 #
+# Common Types
+#
+
+#
 # Debug and Logging System (debugs)
 #
 CONFIG_DEBUGS_ENABLE_LOG=y
@@ -1656,11 +1660,6 @@ CONFIG_DEBUGS_LOG_INTERVAL_MS=5000
 CONFIG_DEBUGS_TASK_STACK_SIZE=2048
 CONFIG_DEBUGS_TASK_PRIORITY=5
 # end of Debug and Logging System (debugs)
-
-#
-# ESP-MQTT Configurations
-#
-# end of ESP-MQTT Configurations
 
 #
 # Fall Detection Logic Configuration
@@ -1683,19 +1682,17 @@ CONFIG_LED_INDICATOR_TASK_PRIORITY=5
 # end of LED Indicator Configuration
 
 #
-# MQTT Client Configuration
-#
-CONFIG_MQTT_CLIENT_ENABLE=y
-CONFIG_MQTT_BROKER_URI="mqtts://io.adafruit.com:8883"
-CONFIG_MQTT_PUB_TOPIC="tranhao / Feeds / json_data"
-# end of MQTT Client Configuration
-
-#
 # SIM4G-GPS Settings
 #
 CONFIG_SIM4G_ENABLED=y
 CONFIG_SIM4G_DEFAULT_PHONE="+84976500569"
 # end of SIM4G-GPS Settings
+
+#
+# User MQTT Configuration
+#
+CONFIG_USER_MQTT_BROKER_URI="mqtt://broker.hivemq.com"
+# end of User MQTT Configuration
 
 #
 # Wi-Fi Configuration
