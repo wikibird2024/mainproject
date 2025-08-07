@@ -43,4 +43,4 @@ Main Flow:
 
 Tested with ESP-IDF v5.x
 
-Author: Ginko | July 2025
+Author: wikibird | July 2025

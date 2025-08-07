@@ -54,9 +54,11 @@ esp_err_t fall_logic_disable(void);
 bool fall_logic_is_enabled(void);
 
 /**
- * @brief Resets the fall detection status, allowing for new fall events to be triggered.
+ * @brief Resets the fall detection status, allowing for new fall events to be
+ * triggered.
  *
- * This function should be called by the event handler after an alert has been completed.
+ * This function should be called by the event handler after an alert has been
+ * completed.
  *
  * @return ESP_OK on success.
  */
