@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <stdint.h> // Recommended for standard integer types
 
 // -----------------------------------------------------------
 // Enumeration of AT Command IDs
@@ -52,6 +52,9 @@ typedef enum {
   AT_CMD_GPS_UTC_TIME_ID,
 
   AT_CMD_CELL_LOCATE_ID,
+
+  // New commands
+  AT_CMD_SET_APN_ID,
 
   AT_CMD_MAX_COUNT, // Used to get the total number of commands
 } at_cmd_id_t;

@@ -1,33 +1,41 @@
-#ifndef _USER_MQTT_H_
-#define _USER_MQTT_H_
+#ifndef USER_MQTT_H
+#define USER_MQTT_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "esp_err.h"
+#include "mqtt_client.h" // Needed for esp_mqtt_client_handle_t
 
 /**
- * @brief Khởi tạo và kết nối client MQTT.
+ * @file user_mqtt.h
+ * @brief High-level MQTT client public interface.
  *
- * @param broker_uri URI của MQTT broker (ví dụ: "mqtt://broker.hivemq.com").
- * @return esp_err_t ESP_OK nếu thành công, ngược lại là mã lỗi.
+ * Encapsulates the initialization and event handling for the MQTT client.
+ */
+
+/**
+ * @brief Initializes and connects the MQTT client.
+ *
+ * @param broker_uri The URI of the MQTT broker (e.g.,
+ * "mqtt://broker.hivemq.com").
+ * @return esp_err_t ESP_OK on success, an error code otherwise.
  */
 esp_err_t user_mqtt_init(const char *broker_uri);
 
 /**
- * @brief Tự động lấy dữ liệu mới nhất từ Data Manager và publish lên MQTT broker.
- * @note  Hàm này sẽ gọi json_wrapper để tạo payload.
+ * @brief Returns the global MQTT client handle.
  *
- * @param topic Chủ đề (topic) MQTT để publish.
- * @param qos Quality of Service của thông điệp.
- * @param retain Flag để giữ lại thông điệp trên broker.
- * @return esp_err_t ESP_OK nếu thành công, ngược lại là mã lỗi.
+ * This function is used by other components (like sim4g_gps) to get the
+ * client handle for publishing messages.
+ *
+ * @return esp_mqtt_client_handle_t The MQTT client handle.
  */
-esp_err_t user_mqtt_publish_current_data(const char *topic, int qos, int retain);
+esp_mqtt_client_handle_t user_mqtt_get_client(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // _USER_MQTT_H_
+#endif // USER_MQTT_H

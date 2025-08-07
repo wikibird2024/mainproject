@@ -1,21 +1,20 @@
-#ifndef _JSON_WRAPPER_H_
-#define _JSON_WRAPPER_H_
+#ifndef JSON_WRAPPER_H
+#define JSON_WRAPPER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "esp_err.h"
+#include "data_manager_types.h"
 
-/**
- * @brief Lấy dữ liệu từ Data Manager và tạo một chuỗi JSON.
- * @note  Chuỗi JSON trả về cần được giải phóng bộ nhớ bởi người gọi (sử dụng free()).
- * @return char* Con trỏ đến chuỗi JSON, hoặc NULL nếu có lỗi.
- */
-char *json_wrapper_create_payload(void);
+// This is the function you provided, we can rename it.
+char *json_wrapper_create_status_payload(void);
+
+// This is the new function for a fall alert.
+char *json_wrapper_create_alert_payload(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // _JSON_WRAPPER_H_
+#endif // JSON_WRAPPER_H

@@ -1,242 +1,204 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "data_manager.h"
+#include "data_manager_types.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-
-#include "esp_log.h"
-#include "esp_err.h"
-
-#include "data_manager.h"
-#include "sim4g_at.h"
-#include "sim4g_at_cmd.h"
-#include "sim4g_gps.h"
-#include "data_manager.h"
+#include "json_wrapper.h" // Provides json_wrapper_* functions
+#include "mqtt_client.h"  // Provides esp_mqtt_client_publish
 #include "sdkconfig.h"
-
-#define DEFAULT_PHONE CONFIG_SIM4G_DEFAULT_PHONE
-#define MONITORING_INTERVAL_MS 30000 // 30 seconds
+#include "sim4g_at.h" // Provides sim4g_at_get_gps
+#include "sim4g_gps.h"
+#include "user_mqtt.h" // Provides user_mqtt_get_client
 
 static const char *TAG = "SIM4G_GPS";
 
-// Internal state
-static SemaphoreHandle_t gps_mutex = NULL;
-static char phone_number[16] = DEFAULT_PHONE;
+// Global variables to store SIM4G and GPS data
+static char s_phone_number[16] = ""; // Phone number for SMS
 
-// Internal task for sending fall alert SMS and MQTT messages
-static void send_alert_task(void *param) {
-    sim4g_gps_data_t *loc = (sim4g_gps_data_t *)param;
+// A mutex to protect access to the SIM4G AT module for GPS queries
+static SemaphoreHandle_t s_gps_at_mutex;
 
-    char msg[256];
-    char json_data[256];
+#define MQTT_TASK_STACK_SIZE CONFIG_MQTT_TASK_STACK_SIZE
+#define MQTT_TASK_PRIORITY CONFIG_MQTT_TASK_PRIORITY
+#define ALERT_TASK_STACK_SIZE CONFIG_ALERT_TASK_STACK_SIZE
+#define ALERT_TASK_PRIORITY CONFIG_ALERT_TASK_PRIORITY
 
-    // Create SMS message content based on GPS availability
-    if (loc->has_gps_fix) {
-        snprintf(msg, sizeof(msg), "Fall detected!\nLat: %.6f\nLon: %.6f\nTime: %s",
-                 loc->latitude, loc->longitude, loc->timestamp);
-        snprintf(json_data, sizeof(json_data), "{\"event\":\"fall\",\"lat\":%.6f,\"lon\":%.6f,\"time\":\"%s\"}",
-                 loc->latitude, loc->longitude, loc->timestamp);
+// -----------------------------------------------------------------------------
+// New Task for Fall Alert
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief FreeRTOS task to handle both SMS and MQTT alerts for a fall event.
+ *
+ * @param param A pointer to the gps_data_t struct from the moment of the fall.
+ */
+static void fall_alert_task(void *param) {
+  gps_data_t *loc = (gps_data_t *)param;
+  char msg[256];
+
+  if (loc->has_gps_fix) {
+    snprintf(msg, sizeof(msg), "Fall detected!\nLat: %.6f\nLon: %.6f\nTime: %s",
+             loc->latitude, loc->longitude, loc->timestamp);
+  } else {
+    snprintf(msg, sizeof(msg), "Fall detected! GPS data unavailable.");
+  }
+
+  if (strlen(s_phone_number) > 0) {
+    ESP_LOGI(TAG, "Sending SMS to %s:\n%s", s_phone_number, msg);
+    esp_err_t sms_err = sim4g_at_send_sms(s_phone_number, msg);
+    if (sms_err != ESP_OK) {
+      ESP_LOGE(TAG, "SMS send failed: %s", esp_err_to_name(sms_err));
     } else {
-        snprintf(msg, sizeof(msg), "Fall detected! GPS data unavailable.");
-        snprintf(json_data, sizeof(json_data), "{\"event\":\"fall\",\"message\":\"GPS data unavailable\"}");
+      ESP_LOGI(TAG, "SMS sent successfully");
     }
+  } else {
+    ESP_LOGW(TAG, "SMS not sent, phone number is not set.");
+  }
 
-    // Send SMS
-    ESP_LOGI(TAG, "Sending SMS to %s:\n%s", phone_number, msg);
-    esp_err_t err = sim4g_at_send_sms(phone_number, msg);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "SMS send failed: %s", esp_err_to_name(err));
+  // Update the data_manager with fall event and GPS data
+  device_state_t current_state;
+  data_manager_get_device_state(&current_state);
+  current_state.gps_data = *loc;
+  current_state.fall_detected = true;
+  data_manager_set_device_state(&current_state);
+
+  ESP_LOGI(TAG, "Publishing fall alert to MQTT...");
+  char *json_payload = json_wrapper_create_alert_payload();
+  if (json_payload) {
+    int msg_id = esp_mqtt_client_publish(
+        user_mqtt_get_client(), CONFIG_MQTT_ALERT_TOPIC, json_payload, 0, 1, 0);
+    free(json_payload);
+    if (msg_id == -1) {
+      ESP_LOGE(TAG, "MQTT publish failed.");
     } else {
-        ESP_LOGI(TAG, "SMS sent successfully");
+      ESP_LOGI(TAG, "MQTT alert published successfully, msg_id=%d", msg_id);
     }
+  } else {
+    ESP_LOGE(TAG, "Failed to create JSON alert payload.");
+  }
 
-    // Send MQTT data (assuming a function named mqtt_publish_json exists)
-    // You will need to implement this part if you are using MQTT.
-    // esp_err_t mqtt_err = mqtt_publish_json("fall_alerts", json_data);
-    // if (mqtt_err != ESP_OK) {
-    //     ESP_LOGE(TAG, "MQTT publish failed");
-    // } else {
-    //     ESP_LOGI(TAG, "MQTT alert published successfully");
-    // }
+  free(loc);
+  vTaskDelete(NULL);
+}
+// -----------------------------------------------------------------------------
+// Existing Tasks and Functions (with some modifications)
+// -----------------------------------------------------------------------------
 
-    free(loc); // Free the allocated memory
-    vTaskDelete(NULL);
+/**
+ * @brief Public function to update GPS location from the SIM4G module.
+ */
+void sim4g_gps_update_location(void) {
+  gps_data_t new_gps_data;
+  if (xSemaphoreTake(s_gps_at_mutex, portMAX_DELAY) == pdTRUE) {
+    sim4g_at_get_gps(&new_gps_data);
+    data_manager_set_gps_data(&new_gps_data);
+    xSemaphoreGive(s_gps_at_mutex);
+  }
 }
 
-// Internal task for periodic MQTT status updates
-static void mqtt_monitoring_task(void *pvParameters) {
-    while (1) {
-        // Get the latest data from the data_manager
-        sim4g_gps_data_t current_gps_data;
-        data_manager_get_gps_data(&current_gps_data);
-        
-        char json_data[256];
+/**
+ * @brief FreeRTOS task for periodically reading GPS data and publishing to
+ * MQTT.
+ */
+static void mqtt_monitoring_task(void *param) {
+  ESP_LOGI(TAG, "MQTT monitoring task started");
+  while (1) {
+    sim4g_gps_update_location();
 
-        // Create the JSON payload for the status update
-        if (current_gps_data.has_gps_fix) {
-            snprintf(json_data, sizeof(json_data),
-                     "{\"status\":\"online\",\"lat\":%.6f,\"lon\":%.6f,\"time\":\"%s\"}",
-                     current_gps_data.latitude, current_gps_data.longitude, current_gps_data.timestamp);
-        } else {
-            snprintf(json_data, sizeof(json_data),
-                     "{\"status\":\"online\",\"message\":\"GPS data unavailable\"}");
+    if (data_manager_get_mqtt_status()) {
+      ESP_LOGI(TAG, "Publishing periodic data to MQTT...");
+      char *json_payload = json_wrapper_create_status_payload();
+      if (json_payload) {
+        int msg_id = esp_mqtt_client_publish(user_mqtt_get_client(),
+                                             CONFIG_MQTT_STATUS_TOPIC,
+                                             json_payload, 0, 0, 0);
+        free(json_payload);
+        if (msg_id == -1) {
+          ESP_LOGE(TAG, "Periodic MQTT publish failed.");
         }
-
-        // Publish the JSON data to a different MQTT topic, e.g., "device_status"
-        ESP_LOGI(TAG, "Publishing status to MQTT:\n%s", json_data);
-        // esp_err_t mqtt_err = mqtt_publish_json("device_status", json_data);
-        // if (mqtt_err != ESP_OK) {
-        //     ESP_LOGE(TAG, "MQTT status publish failed");
-        // } else {
-        //     ESP_LOGI(TAG, "MQTT status published successfully");
-        // }
-
-        vTaskDelay(pdMS_TO_TICKS(MONITORING_INTERVAL_MS));
+      } else {
+        ESP_LOGE(TAG, "Failed to create JSON status payload.");
+      }
+    } else {
+      ESP_LOGW(TAG, "MQTT not connected, skipping periodic publish.");
     }
+
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_MQTT_PERIODIC_PUBLISH_INTERVAL_MS));
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @brief Starts a task to handle a fall alert.
+ * @param gps_data A pointer to the latest GPS data.
+ */
+esp_err_t sim4g_gps_start_fall_alert(const gps_data_t *gps_data) {
+  gps_data_t *task_param = (gps_data_t *)malloc(sizeof(gps_data_t));
+  if (task_param == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate memory for fall alert task parameter.");
+    return ESP_FAIL;
+  }
+  memcpy(task_param, gps_data, sizeof(gps_data_t));
 
+  BaseType_t result =
+      xTaskCreate(fall_alert_task, "fall_alert_task", ALERT_TASK_STACK_SIZE,
+                  task_param, ALERT_TASK_PRIORITY, NULL);
 
+  if (result != pdPASS) {
+    ESP_LOGE(TAG, "Failed to create fall_alert_task");
+    free(task_param);
+    return ESP_FAIL;
+  }
+
+  ESP_LOGI(TAG, "Fall alert task created successfully");
+  return ESP_OK;
+}
+
+/**
+ * @brief Initializes the SIM4G GPS module and starts the monitoring task.
+ */
+/**
+ * @brief Initializes the SIM4G GPS module and starts the monitoring task.
+ */
 esp_err_t sim4g_gps_init(void) {
-    ESP_LOGI(TAG, "Starting SIM4G GPS component initialization...");
-
-    if (!gps_mutex) {
-        gps_mutex = xSemaphoreCreateMutex();
-        if (!gps_mutex) {
-            ESP_LOGE(TAG, "Failed to create GPS mutex");
-            return ESP_ERR_NO_MEM;
-        }
-    }
-
-    ESP_LOGI(TAG, "Calling sim4g_at_init() to set up UART.");
-    esp_err_t err = sim4g_at_init();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "SIM4G AT initialization failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    
-    // NEW: Wait for the module to register on the cellular network first
-    int retry_count = 0;
-    const int max_retries = 30; // 30 retries with 1-second delay = 30 seconds
-    ESP_LOGI(TAG, "Waiting for cellular network registration...");
-
-    while (retry_count < max_retries) {
-        if (sim4g_at_check_network_registration() == ESP_OK) {
-            ESP_LOGI(TAG, "Network registration successful after %d seconds.", retry_count);
-            break;
-        }
-        ESP_LOGI(TAG, "Attempt %d/%d: Not registered yet. Retrying in 1 second...", retry_count + 1, max_retries);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        retry_count++;
-    }
-
-    if (retry_count >= max_retries) {
-        ESP_LOGE(TAG, "Failed to register on cellular network after %d attempts.", max_retries);
-        return ESP_FAIL;
-    }
-    
-    // Now that the network is registered, try to configure and enable GPS.
-    ESP_LOGI(TAG, "Calling sim4g_at_configure_gps() to set up autogps.");
-    sim4g_at_configure_gps();
-    
-    ESP_LOGI(TAG, "Calling sim4g_at_enable_gps() to power on GPS.");
-    err = sim4g_at_enable_gps();
-
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "GPS enabled successfully");
-        // Start the periodic monitoring task ONLY IF GPS init succeeds
-        ESP_LOGI(TAG, "Creating MQTT monitoring task.");
-        xTaskCreate(mqtt_monitoring_task, "mqtt_monitoring_task", 4096, NULL, 5, NULL);
-    } else {
-        ESP_LOGE(TAG, "GPS initialization failed: %s", esp_err_to_name(err));
-    }
+  ESP_LOGI(TAG, "Initializing SIM4G AT module...");
+  esp_err_t err = sim4g_at_init();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "SIM4G AT initialization failed: %s", esp_err_to_name(err));
     return err;
+  }
+
+  // --- NEW: APN CONFIGURATION ---
+  // Configure the APN based on the value from Kconfig
+  ESP_LOGI(TAG, "Configuring APN: %s", CONFIG_SIM_APN);
+  err = sim4g_at_configure_apn(CONFIG_SIM_APN);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "APN configuration failed: %s", esp_err_to_name(err));
+    // NOTE: You may want to return an error here depending on if a working
+    // APN is a hard requirement for your application.
+  }
+  // --- END NEW ---
+
+  s_gps_at_mutex = xSemaphoreCreateMutex();
+  if (s_gps_at_mutex == NULL) {
+    ESP_LOGE(TAG, "Failed to create mutex");
+    return ESP_FAIL;
+  }
+
+  xTaskCreate(mqtt_monitoring_task, "mqtt_mon_task", MQTT_TASK_STACK_SIZE, NULL,
+              MQTT_TASK_PRIORITY, NULL);
+
+  return ESP_OK;
 }
 
-// ... ( set phone )
-esp_err_t sim4g_gps_set_phone_number(const char *number) {
-    if (!number || strlen(number) >= sizeof(phone_number)) {
-        ESP_LOGW(TAG, "Invalid phone number input");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    strncpy(phone_number, number, sizeof(phone_number));
-    phone_number[sizeof(phone_number) - 1] = '\0';
-    ESP_LOGI(TAG, "Phone number updated: %s", phone_number);
-    return ESP_OK;
-}
-
-esp_err_t sim4g_gps_is_enabled(bool *enabled) {
-    if (!enabled)
-        return ESP_ERR_INVALID_ARG;
-
-    char response[64] = {0};
-    
-    esp_err_t err = sim4g_at_send_by_id(AT_CMD_GPS_STATUS_ID, response, sizeof(response));
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "GPS status query failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    *enabled = (strstr(response, "+QGPS: 1") != NULL);
-    return ESP_OK;
-}
-
-esp_err_t sim4g_gps_update_location(void) {
-    esp_err_t result = ESP_FAIL;
-
-    if (xSemaphoreTake(gps_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        char ts[64] = {0};
-        char lat_str[64] = {0};
-        char lon_str[64] = {0};
-        
-        sim4g_gps_data_t current_gps_data = {0};
-
-        if (sim4g_at_get_location(ts, lat_str, lon_str) == ESP_OK) {
-            current_gps_data.latitude = atof(lat_str);
-            current_gps_data.longitude = atof(lon_str);
-            strncpy(current_gps_data.timestamp, ts, sizeof(current_gps_data.timestamp) - 1);
-            current_gps_data.has_gps_fix = true;
-            
-            ESP_LOGI(TAG, "GPS data updated: Lat=%.6f Lon=%.6f", current_gps_data.latitude, current_gps_data.longitude);
-            result = ESP_OK;
-        } else {
-            ESP_LOGW(TAG, "Failed to get GPS data.");
-            current_gps_data.has_gps_fix = false;
-        }
-        
-        data_manager_set_gps_data(&current_gps_data);
-        
-        xSemaphoreGive(gps_mutex);
-    } else {
-        ESP_LOGW(TAG, "Could not acquire GPS mutex");
-        result = ESP_ERR_TIMEOUT;
-    }
-
-    return result;
-}
-
-esp_err_t sim4g_gps_send_fall_alert_async(sim4g_gps_data_t data) {
-    sim4g_gps_data_t *copy = (sim4g_gps_data_t *)malloc(sizeof(sim4g_gps_data_t));
-    if (!copy) {
-        ESP_LOGE(TAG, "Out of memory for SMS task allocation");
-        return ESP_ERR_NO_MEM;
-    }
-    
-    memcpy(copy, &data, sizeof(sim4g_gps_data_t));
-
-    if (xTaskCreate(send_alert_task, "sim4g_alert_task", 4096, copy, 5, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create alert task");
-        free(copy);
-        return ESP_FAIL;
-    }
-
-    return ESP_OK;
+void sim4g_gps_set_phone_number(const char *number) {
+  if (number) {
+    strncpy(s_phone_number, number, sizeof(s_phone_number) - 1);
+    s_phone_number[sizeof(s_phone_number) - 1] = '\0';
+    ESP_LOGI(TAG, "Phone number set to: %s", s_phone_number);
+  }
 }

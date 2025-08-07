@@ -5,9 +5,22 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <stdbool.h>
-#include "sim4g_gps.h"
+#include <stddef.h>
+#include <stdint.h>
+
+/**
+ * @brief Data structure for GPS data.
+ *
+ * This struct is now defined here to make the data_manager component
+ * standalone.
+ */
+typedef struct {
+  float latitude;
+  float longitude;
+  char timestamp[24];
+  bool has_gps_fix;
+} gps_data_t;
 
 /**
  * @brief Data structure containing all device state.
@@ -16,22 +29,22 @@ extern "C" {
  * All modules get data from here to ensure consistency.
  */
 typedef struct {
-    // Basic Information
-    char device_id[32];
-    uint64_t timestamp_ms; // Using 64-bit for millisecond timestamp
+  // Basic Information
+  char device_id[32];
+  uint64_t timestamp_ms;
 
-    // Sensor State
-    bool fall_detected;
+  // Sensor State
+  bool fall_detected;
 
-    // Connection State
-    bool wifi_connected;
-    bool mqtt_connected;
-    bool sim_registered;
+  // Connection State
+  bool wifi_connected;
+  bool mqtt_connected;
+  bool sim_registered;
 
-    // GPS Data
-    sim4g_gps_data_t gps_data; // MODIFIED: Using the new GPS data struct
+  // GPS Data
+  gps_data_t gps_data;
 
-    // Add other data fields as needed
+  // Add other data fields as needed
 } device_state_t;
 
 #ifdef __cplusplus

@@ -7,7 +7,7 @@ idf_component_register(
     PRIV_INCLUDE_DIRS 
         "src"
     REQUIRES 
-        comm freertos log driver
+        comm user_mqtt data_manager freertos log driver
     PRIV_REQUIRES 
-        esp_timer data_manager
+        esp_timer 
 )

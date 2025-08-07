@@ -1,14 +1,79 @@
-
 menu "SIM4G-GPS Settings"
 
-config SIM4G_ENABLED
-    bool "Enable SIM4G-GPS"
-    default y
+    config SIM4G_ENABLED
+        bool "Enable SIM4G-GPS"
+        default y
+        help
+            Enables the SIM4G-GPS component and its related features.
 
+    config SIM_APN
+        string "SIM card APN"
+        default "internet"
+        help
+            Access Point Name (APN) for the SIM card.
+            This is required for the module to connect to the cellular data network.
 
-config SIM4G_DEFAULT_PHONE
-    string "Default phone number to send alerts"
-    default "+84999999999"
-    help
-        This phone number will be used for fallback SMS alerts if none is provided.
+    config SIM4G_DEFAULT_PHONE
+        string "Default phone number for SMS alerts"
+        default "+84999999999"
+        help
+            This phone number will be used for fallback SMS alerts if none is provided at runtime.
+
+    menu "MQTT Task Settings"
+        depends on SIM4G_ENABLED
+
+        config MQTT_TASK_STACK_SIZE
+            int "Stack size for the MQTT monitoring task"
+            default 4096
+            help
+                Stack size (in bytes) for the task that handles periodic MQTT publications.
+
+        config MQTT_TASK_PRIORITY
+            int "Priority for the MQTT monitoring task"
+            default 5
+            help
+                Priority (0-24, with 24 being the highest) for the periodic MQTT task.
+
+        config MQTT_PERIODIC_PUBLISH_INTERVAL_MS
+            int "Interval for periodic MQTT publishing (ms)"
+            default 30000
+            help
+                The time in milliseconds between each periodic MQTT status update.
+
+    endmenu
+
+    menu "Fall Alert Task Settings"
+        depends on SIM4G_ENABLED
+
+        config ALERT_TASK_STACK_SIZE
+            int "Stack size for the fall alert task"
+            default 4096
+            help
+                Stack size (in bytes) for the non-blocking task that sends fall alerts (SMS and MQTT).
+
+        config ALERT_TASK_PRIORITY
+            int "Priority for the fall alert task"
+            default 5
+            help
+                Priority (0-24, with 24 being the highest) for the fall alert task.
+
+    endmenu
+
+    menu "MQTT Topic Settings"
+        depends on SIM4G_ENABLED
+
+        config MQTT_STATUS_TOPIC
+            string "MQTT Periodic Status Topic"
+            default "device/status"
+            help
+                The topic used for periodic status updates (e.g., GPS location).
+
+        config MQTT_ALERT_TOPIC
+            string "MQTT Fall Alert Topic"
+            default "device/fall_alert"
+            help
+                The topic used for critical fall alert messages.
+
+    endmenu
+
 endmenu

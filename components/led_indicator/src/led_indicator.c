@@ -4,8 +4,8 @@
  */
 
 #include "led_indicator.h"
-#include "comm.h"
-#include "debugs.h"
+#include "driver/gpio.h" // New: Use ESP-IDF GPIO driver directly
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
@@ -19,46 +19,58 @@
 #define ERROR_BLINK_OFF_MS 150
 #define ERROR_BLINK_PAUSE_MS 700
 
+static const char *TAG = "LED_INDICATOR";
+
 static TaskHandle_t led_task_handle = NULL;
 static led_mode_t current_mode = LED_MODE_OFF;
-static bool led_initialized = false;
 
 static const int led_gpio = CONFIG_LED_INDICATOR_GPIO;
 static const bool led_active_high = CONFIG_LED_INDICATOR_ACTIVE_HIGH;
 
 static portMUX_TYPE led_mux = portMUX_INITIALIZER_UNLOCKED;
 
-// Internal: set the LED level using comm abstraction
+// New: Macro to simplify critical sections
+#define LED_ENTER_CRITICAL() portENTER_CRITICAL(&led_mux)
+#define LED_EXIT_CRITICAL() portEXIT_CRITICAL(&led_mux)
+
+/**
+ * @brief Internal: set the LED level using ESP-IDF GPIO driver.
+ *
+ * This function handles the active-high/active-low logic internally.
+ *
+ * @param on True to turn the LED on, false to turn it off.
+ */
 static inline void led_set(bool on) {
-  comm_gpio_led_set(led_active_high ? on : !on);
+  gpio_set_level(led_gpio, led_active_high ? on : !on);
 }
 
-// Internal: safely get current mode
-led_mode_t led_indicator_get_mode(void) {
-  portENTER_CRITICAL(&led_mux);
-  led_mode_t mode = current_mode;
-  portEXIT_CRITICAL(&led_mux);
-  return mode;
-}
-
-// Internal: main LED control task
+/**
+ * @brief Internal: main LED control task.
+ *
+ * This task controls the LED's state based on the current mode.
+ * It remains responsive by yielding or delaying as needed.
+ *
+ * @param arg Task parameter (unused).
+ */
 static void led_task(void *arg) {
   while (1) {
     led_mode_t mode;
 
-    portENTER_CRITICAL(&led_mux);
+    LED_ENTER_CRITICAL();
     mode = current_mode;
-    portEXIT_CRITICAL(&led_mux);
+    LED_EXIT_CRITICAL();
 
     switch (mode) {
     case LED_MODE_OFF:
       led_set(false);
-      vTaskDelay(pdMS_TO_TICKS(100));
+      // No need for a continuous delay, just yield to other tasks.
+      vTaskDelay(1);
       break;
 
     case LED_MODE_ON:
       led_set(true);
-      vTaskDelay(pdMS_TO_TICKS(100));
+      // No need for a continuous delay, just yield to other tasks.
+      vTaskDelay(1);
       break;
 
     case LED_MODE_BLINK_FAST:
@@ -95,54 +107,66 @@ static void led_task(void *arg) {
 
 esp_err_t led_indicator_init(void) {
 #if CONFIG_LED_INDICATOR_ENABLE
-  if (led_initialized) {
-    DEBUGS_LOGW("LED already initialized.");
+  // New: Check if task handle already exists instead of a separate flag
+  if (led_task_handle != NULL) {
+    ESP_LOGW(TAG, "LED already initialized.");
     return ESP_OK;
   }
 
-  esp_err_t err = comm_gpio_init(led_gpio, -1);
+  // New: Use gpio_config_t to set up the GPIO pin
+  gpio_config_t io_conf = {
+      .pin_bit_mask = (1ULL << led_gpio),
+      .mode = GPIO_MODE_OUTPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_DISABLE,
+  };
+  esp_err_t err = gpio_config(&io_conf);
   if (err != ESP_OK) {
-    DEBUGS_LOGE("LED GPIO init failed: %s", esp_err_to_name(err));
+    ESP_LOGE(TAG, "LED GPIO init failed: %s", esp_err_to_name(err));
     return err;
   }
+
+  // New: Ensure LED starts in the OFF state
+  led_set(false);
 
   BaseType_t ret =
       xTaskCreate(led_task, "led_indicator_task", LED_TASK_STACK_SIZE, NULL,
                   LED_TASK_PRIORITY, &led_task_handle);
 
   if (ret != pdPASS) {
-    DEBUGS_LOGE("Failed to create LED task");
+    ESP_LOGE(TAG, "Failed to create LED task");
     return ESP_FAIL;
   }
 
-  led_initialized = true;
-  DEBUGS_LOGI("LED initialized on GPIO %d, active_%s", led_gpio,
-              led_active_high ? "HIGH" : "LOW");
+  ESP_LOGI(TAG, "LED initialized on GPIO %d, active_%s", led_gpio,
+           led_active_high ? "HIGH" : "LOW");
 #endif
   return ESP_OK;
 }
 
 esp_err_t led_indicator_set_mode(led_mode_t mode) {
-  if (!led_initialized)
+  // New: Check if task handle is NULL instead of a separate flag
+  if (led_task_handle == NULL)
     return ESP_ERR_INVALID_STATE;
 
   if (mode < LED_MODE_OFF || mode > LED_MODE_BLINK_ERROR)
     return ESP_ERR_INVALID_ARG;
 
-  portENTER_CRITICAL(&led_mux);
+  LED_ENTER_CRITICAL();
   current_mode = mode;
-  portEXIT_CRITICAL(&led_mux);
+  LED_EXIT_CRITICAL();
 
   return ESP_OK;
 }
 
 void led_indicator_deinit(void) {
-  if (!led_initialized)
+  if (led_task_handle == NULL)
     return;
 
+  // New: Ensure the GPIO is cleaned up
+  gpio_reset_pin(led_gpio);
   vTaskDelete(led_task_handle);
-  led_set(false);
   led_task_handle = NULL;
-  led_initialized = false;
-  DEBUGS_LOGI("LED deinitialized");
+  ESP_LOGI(TAG, "LED deinitialized");
 }
